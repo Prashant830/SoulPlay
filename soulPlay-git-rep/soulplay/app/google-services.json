@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "315234415435",
+    "firebase_url": "https://chatcouple-a1d18-default-rtdb.firebaseio.com",
+    "project_id": "chatcouple-a1d18",
+    "storage_bucket": "chatcouple-a1d18.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:315234415435:android:85409c6f73938f908e6ece",
+        "android_client_info": {
+          "package_name": "com.masti.soulplay"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "315234415435-eq1io03q8f07dushhvfvnvrtohit3ee2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDMY1do6AP3GPBuGhhXSZhqjssw3aREUvY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "315234415435-eq1io03q8f07dushhvfvnvrtohit3ee2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
