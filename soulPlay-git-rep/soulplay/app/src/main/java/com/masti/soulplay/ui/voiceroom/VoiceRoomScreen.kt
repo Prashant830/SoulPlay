@@ -144,6 +144,7 @@ fun VoiceRoomScreen(
     viewModel: VoiceRoomViewModel,
     hasVoicePermission: () -> Boolean,
     requestVoicePermission: () -> Unit,
+    onOpenChat: () -> Unit = {},
     onRoomClosed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -170,6 +171,9 @@ fun VoiceRoomScreen(
     var giftRecipientUid by remember { mutableStateOf<String?>(null) }
     var giftSending by remember { mutableStateOf(false) }
     var giftError by remember { mutableStateOf<String?>(null) }
+    var playerMenuUid by remember { mutableStateOf<String?>(null) }
+    var socialFeedback by remember { mutableStateOf<String?>(null) }
+    var showGiftPlayerPicker by remember { mutableStateOf(false) }
     val giftScope = rememberCoroutineScope()
     var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -189,6 +193,13 @@ fun VoiceRoomScreen(
         while (true) {
             delay(1000)
             tick = System.currentTimeMillis()
+        }
+    }
+    LaunchedEffect(socialFeedback) {
+        val msg = socialFeedback ?: return@LaunchedEffect
+        if (msg.isNotBlank()) {
+            delay(2800)
+            socialFeedback = null
         }
     }
     val secondsLeft = room?.timerEndAt?.let { end ->
@@ -308,12 +319,12 @@ fun VoiceRoomScreen(
                     ) {
                         rowSlots.forEach { slot ->
                             val level = slot.agoraUid?.let { uid -> audioLevels[uid] } ?: 0f
-                            val onOpenGift = when {
+                            val onSeatClick = when {
                                 slot.isEmpty || slot.firebaseUid == null -> null
                                 else -> {
                                     {
                                         giftError = null
-                                        giftRecipientUid = slot.firebaseUid
+                                        playerMenuUid = slot.firebaseUid
                                     }
                                 }
                             }
@@ -321,7 +332,7 @@ fun VoiceRoomScreen(
                                 PlayerSlotCard(
                                     slot = slot,
                                     speakingLevel = level,
-                                    onSlotClick = onOpenGift
+                                    onSlotClick = onSeatClick
                                 )
                             }
                         }
@@ -336,6 +347,183 @@ fun VoiceRoomScreen(
         }
 
         GiftBannerOverlay(viewModel = viewModel)
+
+        socialFeedback?.takeIf { it.isNotBlank() }?.let { msg ->
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 88.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xFF0F172A).copy(alpha = 0.92f),
+                shadowElevation = 4.dp
+            ) {
+                Text(
+                    text = msg,
+                    modifier = Modifier.padding(14.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+
+        playerMenuUid?.let { targetUid ->
+            val menuName = userProfiles[targetUid]?.username?.takeIf { it.isNotBlank() }
+                ?: FirebaseUidMapping.shortLabel(targetUid)
+            val isOwnProfile = myUid != null && targetUid == myUid
+            val menuPhotoUrl = userProfiles[targetUid]?.profilePictureUrl?.takeIf { it.isNotBlank() }
+            AlertDialog(
+                onDismissRequest = { playerMenuUid = null },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFF1F5F9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (menuPhotoUrl.isNullOrBlank()) {
+                                Image(
+                                    painter = painterResource(R.drawable.ic_mascot_hero),
+                                    contentDescription = "Profile photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                AsyncImage(
+                                    model = menuPhotoUrl,
+                                    contentDescription = "Profile photo",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    placeholder = painterResource(R.drawable.ic_mascot_hero),
+                                    error = painterResource(R.drawable.ic_mascot_hero),
+                                )
+                            }
+                        }
+                        Column {
+                            Text(menuName, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isOwnProfile) "You" else "SoulPlay user",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF64748B)
+                            )
+                        }
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (isOwnProfile) "This is your mini profile." else "Choose an action for this player.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B)
+                        )
+                        if (!isOwnProfile) {
+                            Button(
+                                onClick = {
+                                    viewModel.sendFriendRequest(targetUid) { result ->
+                                        playerMenuUid = null
+                                        socialFeedback = result.fold(
+                                            onSuccess = { "Friend request sent" },
+                                            onFailure = { e ->
+                                                when {
+                                                    e.message?.contains("already sent", ignoreCase = true) == true ->
+                                                        "Request already sent"
+                                                    else -> e.message ?: "Could not send request"
+                                                }
+                                            }
+                                        )
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                            ) {
+                                Text("Add friend", fontWeight = FontWeight.SemiBold, color = Color.White)
+                            }
+                            Button(
+                                onClick = {
+                                    giftRecipientUid = targetUid
+                                    playerMenuUid = null
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentPink),
+                            ) {
+                                Text("Send gift", fontWeight = FontWeight.SemiBold, color = Color.White)
+                            }
+                        }
+                        if (isOwnProfile) {
+                            Button(
+                                onClick = {
+                                    giftRecipientUid = targetUid
+                                    playerMenuUid = null
+                                    giftError = null
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AccentPink),
+                            ) {
+                                Text("Send gift", fontWeight = FontWeight.SemiBold, color = Color.White)
+                            }
+                            Text(
+                                text = "Add friend is hidden for your own profile.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF94A3B8),
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { playerMenuUid = null }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+
+        if (showGiftPlayerPicker) {
+            val others = slots.filter { s ->
+                !s.isEmpty &&
+                    s.firebaseUid != null &&
+                    (myUid == null || s.firebaseUid != myUid)
+            }
+            AlertDialog(
+                onDismissRequest = { showGiftPlayerPicker = false },
+                title = { Text("Send gift to") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        if (others.isEmpty()) {
+                            Text(
+                                text = "No other players in this room.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF64748B)
+                            )
+                        } else {
+                            others.forEach { s ->
+                                val uid = s.firebaseUid ?: return@forEach
+                                val label = userProfiles[uid]?.username?.takeIf { it.isNotBlank() }
+                                    ?: FirebaseUidMapping.shortLabel(uid)
+                                TextButton(
+                                    onClick = {
+                                        giftRecipientUid = uid
+                                        showGiftPlayerPicker = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(label, modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showGiftPlayerPicker = false }) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
 
         GiftWallDialog(
             visible = giftRecipientUid != null,
@@ -371,6 +559,11 @@ fun VoiceRoomScreen(
             isMuted = isMuted,
             onMicClick = {
                 if (inRoom) viewModel.toggleMute()
+            },
+            onChatClick = onOpenChat,
+            onGiftClick = {
+                giftError = null
+                showGiftPlayerPicker = true
             },
             onCenterClick = {
                 when {
@@ -964,6 +1157,8 @@ private fun VoiceActionBar(
     inRoom: Boolean,
     isMuted: Boolean,
     onMicClick: () -> Unit,
+    onChatClick: () -> Unit,
+    onGiftClick: () -> Unit,
     onCenterClick: () -> Unit,
     centerEnabled: Boolean,
     centerLabel: String
@@ -997,7 +1192,7 @@ private fun VoiceActionBar(
                         }
                     )
                 }
-                IconButton(onClick = { }, enabled = inRoom) {
+                IconButton(onClick = onChatClick, enabled = inRoom) {
                     Icon(
                         Icons.Filled.ChatBubbleOutline,
                         contentDescription = "Chat",
@@ -1019,7 +1214,7 @@ private fun VoiceActionBar(
                         maxLines = 1
                     )
                 }
-                IconButton(onClick = { }, enabled = inRoom) {
+                IconButton(onClick = onGiftClick, enabled = inRoom) {
                     Icon(
                         Icons.Filled.CardGiftcard,
                         contentDescription = "Gift",

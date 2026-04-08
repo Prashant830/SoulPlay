@@ -3,9 +3,12 @@ package com.masti.soulplay.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -25,6 +28,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.masti.soulplay.ui.chat.ChatScreen
+import com.masti.soulplay.ui.chat.ChatThreadScreen
+import com.masti.soulplay.ui.chat.ChatThreadViewModel
+import com.masti.soulplay.ui.chat.ChatViewModel
 import com.masti.soulplay.ui.home.HomeMatchUiState
 import com.masti.soulplay.ui.home.HomeScreen
 import com.masti.soulplay.ui.home.HomeViewModel
@@ -37,7 +44,9 @@ import com.masti.soulplay.ui.voiceroom.VoiceRoomNeedMatchScreen
 import com.masti.soulplay.ui.voiceroom.VoiceRoomScreen
 import com.masti.soulplay.ui.voiceroom.VoiceRoomViewModel
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import com.masti.soulplay.domain.repository.SocialRepository
 
 private data class BottomTab(
     val route: String,
@@ -48,6 +57,7 @@ private data class BottomTab(
 private val bottomTabs = listOf(
     BottomTab(SoulplayDestinations.Home, "Home", Icons.Filled.Home),
     BottomTab(SoulplayDestinations.VoiceRoom, "Voice Room", Icons.Filled.Mic),
+    BottomTab(SoulplayDestinations.Chat, "Chat", Icons.Filled.ChatBubbleOutline),
     BottomTab(SoulplayDestinations.Settings, "Profile", Icons.Filled.Person)
 )
 
@@ -58,11 +68,21 @@ fun SoulplayApp(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
+    val socialRepository: SocialRepository = koinInject<SocialRepository>()
+    val incomingFriendRequests by socialRepository.incomingFriendRequests.collectAsStateWithLifecycle()
+    val unreadByPeer by socialRepository.unreadMessageCounts.collectAsStateWithLifecycle()
+    val friendRequestBadgeCount = incomingFriendRequests.size
+    val unreadMessageBadgeCount = unreadByPeer.values.sum()
+    val chatBadgeCount = friendRequestBadgeCount + unreadMessageBadgeCount
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val route = currentDestination?.route.orEmpty()
     val hideBottomBar =
-        route.contains("voice_room") || route.contains("login") || route.contains("create_profile") || route.contains("auth_gate")
+        route.contains("voice_room") ||
+            route.startsWith("chat_thread") ||
+            route.contains("login") ||
+            route.contains("create_profile") ||
+            route.contains("auth_gate")
     val showBottomBar = !hideBottomBar
 
     // Completely consume system back inside Compose so it doesn't pop the nav stack.
@@ -89,7 +109,23 @@ fun SoulplayApp(
                                     restoreState = true
                                 }
                             },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            icon = {
+                                if (tab.route == SoulplayDestinations.Chat && chatBadgeCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge {
+                                                Text(
+                                                    chatBadgeCount.coerceAtMost(99).toString()
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Icon(tab.icon, contentDescription = tab.label)
+                                    }
+                                } else {
+                                    Icon(tab.icon, contentDescription = tab.label)
+                                }
+                            },
                             label = { Text(tab.label) }
                         )
                     }
@@ -163,10 +199,20 @@ fun SoulplayApp(
                 HomeScreen(
                     matchState = matchState,
                     coinBalance = coinBalance,
+                    notificationCount = chatBadgeCount,
                     onFindMatch = { homeVm.startFindMatch() },
                     onCancelSearch = { homeVm.cancelSearch() },
                     onOpenVoiceTab = {
                         navController.navigate(SoulplayDestinations.VoiceRoom) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onOpenNotifications = {
+                        navController.navigate(SoulplayDestinations.Chat) {
                             popUpTo(navController.graph.findStartDestination().id) {
                                 saveState = true
                             }
@@ -216,6 +262,11 @@ fun SoulplayApp(
                         viewModel = voiceVm,
                         hasVoicePermission = hasVoicePermission,
                         requestVoicePermission = requestVoicePermission,
+                        onOpenChat = {
+                            navController.navigate(SoulplayDestinations.Chat) {
+                                launchSingleTop = true
+                            }
+                        },
                         onRoomClosed = {
                             navController.navigate(SoulplayDestinations.Home) {
                                 popUpTo(navController.graph.findStartDestination().id) {
@@ -225,6 +276,36 @@ fun SoulplayApp(
                                 restoreState = true
                             }
                         }
+                    )
+                }
+            }
+            composable(SoulplayDestinations.Chat) {
+                val chatVm: ChatViewModel = koinViewModel()
+                ChatScreen(
+                    viewModel = chatVm,
+                    onOpenThread = { peerUid ->
+                        navController.navigate(SoulplayDestinations.chatThread(peerUid)) {
+                            launchSingleTop = false
+                        }
+                    }
+                )
+            }
+            composable(
+                route = SoulplayDestinations.ChatThread,
+                arguments = listOf(
+                    navArgument("peerUid") { type = NavType.StringType }
+                )
+            ) { entry ->
+                val peerUid = entry.arguments?.getString("peerUid").orEmpty()
+                LaunchedEffect(peerUid) {
+                    if (peerUid.isBlank()) navController.popBackStack()
+                }
+                if (peerUid.isNotBlank()) {
+                    val threadVm: ChatThreadViewModel =
+                        koinViewModel(parameters = { parametersOf(peerUid) })
+                    ChatThreadScreen(
+                        viewModel = threadVm,
+                        onBack = { navController.popBackStack() }
                     )
                 }
             }

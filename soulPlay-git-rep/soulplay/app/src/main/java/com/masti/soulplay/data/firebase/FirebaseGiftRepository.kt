@@ -80,7 +80,11 @@ class FirebaseGiftRepository(
                 addCoins(balanceRef, price)
                 throw e
             }
-            GiftSendResult(newBalance = newBalance, eventId = eventId)
+            GiftSendResult(
+                newBalance = newBalance,
+                eventId = eventId,
+                receiverCoins = receiverCoins,
+            )
         }
     }
 

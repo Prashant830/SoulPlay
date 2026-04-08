@@ -17,9 +17,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -55,9 +61,11 @@ import com.masti.soulplay.domain.RoomJoinEconomy
 fun HomeScreen(
     matchState: HomeMatchUiState,
     coinBalance: Long?,
+    notificationCount: Int = 0,
     onFindMatch: () -> Unit,
     onCancelSearch: () -> Unit,
     onOpenVoiceTab: () -> Unit,
+    onOpenNotifications: () -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -98,8 +106,31 @@ fun HomeScreen(
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    IconButton(onClick = onOpenNotifications) {
+                        if (notificationCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge {
+                                        Text(notificationCount.coerceAtMost(99).toString())
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Filled.Notifications,
+                                    contentDescription = "Notifications",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        } else {
+                            Icon(
+                                Icons.Filled.Notifications,
+                                contentDescription = "Notifications",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier

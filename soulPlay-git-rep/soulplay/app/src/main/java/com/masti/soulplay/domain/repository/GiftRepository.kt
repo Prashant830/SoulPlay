@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 data class GiftSendResult(
     val newBalance: Long,
     val eventId: String,
+    val receiverCoins: Long = 0L,
 )
 
 /**

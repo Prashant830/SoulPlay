@@ -13,6 +13,7 @@ import com.masti.soulplay.domain.model.VoiceConnectionState
 import com.masti.soulplay.domain.repository.GameSessionRepository
 import com.masti.soulplay.domain.repository.GiftRepository
 import com.masti.soulplay.domain.repository.GiftSendResult
+import com.masti.soulplay.domain.repository.SocialRepository
 import com.masti.soulplay.domain.repository.VoiceRoomRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +32,7 @@ class VoiceRoomViewModel(
     private val game: GameSessionRepository,
     private val database: FirebaseDatabase,
     private val giftRepository: GiftRepository,
+    private val socialRepository: SocialRepository,
     private val roomId: String,
 ) : AndroidViewModel(application) {
 
@@ -106,12 +108,24 @@ class VoiceRoomViewModel(
         _userProfiles.value = known + loaded
     }
 
-    suspend fun sendGift(recipientUid: String, giftId: String): Result<GiftSendResult> =
-        giftRepository.sendGift(
+    suspend fun sendGift(recipientUid: String, giftId: String): Result<GiftSendResult> {
+        return giftRepository.sendGift(
             GiftSendContext.RajaRaniGame(roomId),
             giftId,
             recipientUid,
         )
+    }
+
+    fun sendFriendRequest(toUid: String, onResult: (Result<Unit>) -> Unit) {
+        viewModelScope.launch {
+            val result = try {
+                socialRepository.sendFriendRequest(toUid)
+            } catch (e: Exception) {
+                Result.failure(IllegalStateException(e.message ?: "Could not send request", e))
+            }
+            onResult(result)
+        }
+    }
 
     fun joinVoiceChannel() {
         if (BuildConfig.AGORA_APP_ID.isBlank()) return
