@@ -78,7 +78,12 @@ class ChatViewModel(
 
     fun accept(fromUid: String) {
         viewModelScope.launch {
-            social.acceptFriendRequest(fromUid).onFailure { e ->
+            val result = try {
+                social.acceptFriendRequest(fromUid)
+            } catch (e: Exception) {
+                Result.failure(IllegalStateException(e.message ?: "Could not accept", e))
+            }
+            result.onFailure { e ->
                 _error.value = e.message ?: "Could not accept"
             }
         }
@@ -86,7 +91,12 @@ class ChatViewModel(
 
     fun decline(fromUid: String) {
         viewModelScope.launch {
-            social.declineFriendRequest(fromUid).onFailure { e ->
+            val result = try {
+                social.declineFriendRequest(fromUid)
+            } catch (e: Exception) {
+                Result.failure(IllegalStateException(e.message ?: "Could not decline", e))
+            }
+            result.onFailure { e ->
                 _error.value = e.message ?: "Could not decline"
             }
         }

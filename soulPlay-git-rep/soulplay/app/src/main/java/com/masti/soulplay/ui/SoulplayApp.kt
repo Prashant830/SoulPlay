@@ -262,11 +262,6 @@ fun SoulplayApp(
                         viewModel = voiceVm,
                         hasVoicePermission = hasVoicePermission,
                         requestVoicePermission = requestVoicePermission,
-                        onOpenChat = {
-                            navController.navigate(SoulplayDestinations.Chat) {
-                                launchSingleTop = true
-                            }
-                        },
                         onRoomClosed = {
                             navController.navigate(SoulplayDestinations.Home) {
                                 popUpTo(navController.graph.findStartDestination().id) {

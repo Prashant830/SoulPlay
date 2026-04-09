@@ -29,7 +29,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CardGiftcard
-import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Mood
@@ -66,6 +65,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.sp
 import com.masti.soulplay.BuildConfig
 import com.masti.soulplay.R
 import com.masti.soulplay.data.firebase.FirebaseUidMapping
+import com.masti.soulplay.ui.common.PrimaryActionButton
 import com.masti.soulplay.domain.model.GamePhase
 import com.masti.soulplay.domain.model.GameRoomSnapshot
 import com.masti.soulplay.domain.model.VoiceConnectionState
@@ -144,7 +145,6 @@ fun VoiceRoomScreen(
     viewModel: VoiceRoomViewModel,
     hasVoicePermission: () -> Boolean,
     requestVoicePermission: () -> Unit,
-    onOpenChat: () -> Unit = {},
     onRoomClosed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -248,6 +248,10 @@ fun VoiceRoomScreen(
         userProfiles[uid]?.username?.takeIf { it.isNotBlank() }
             ?: FirebaseUidMapping.shortLabel(uid)
     }.orEmpty()
+    val friendRequestSentText = stringResource(R.string.friend_request_sent)
+    val requestAlreadySentText = stringResource(R.string.request_already_sent)
+    val friendRequestFailedText = stringResource(R.string.friend_request_failed)
+    val sendGiftFailedText = stringResource(R.string.send_gift_failed)
 
     Box(
         modifier = modifier
@@ -368,166 +372,62 @@ fun VoiceRoomScreen(
         }
 
         playerMenuUid?.let { targetUid ->
-            val menuName = userProfiles[targetUid]?.username?.takeIf { it.isNotBlank() }
-                ?: FirebaseUidMapping.shortLabel(targetUid)
-            val isOwnProfile = myUid != null && targetUid == myUid
-            val menuPhotoUrl = userProfiles[targetUid]?.profilePictureUrl?.takeIf { it.isNotBlank() }
-            AlertDialog(
-                onDismissRequest = { playerMenuUid = null },
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF1F5F9)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (menuPhotoUrl.isNullOrBlank()) {
-                                Image(
-                                    painter = painterResource(R.drawable.ic_mascot_hero),
-                                    contentDescription = "Profile photo",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                AsyncImage(
-                                    model = menuPhotoUrl,
-                                    contentDescription = "Profile photo",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    placeholder = painterResource(R.drawable.ic_mascot_hero),
-                                    error = painterResource(R.drawable.ic_mascot_hero),
-                                )
+            VoiceRoomPlayerActionDialog(
+                targetUid = targetUid,
+                myUid = myUid,
+                profile = userProfiles[targetUid],
+                onDismiss = { playerMenuUid = null },
+                onAddFriend = {
+                    viewModel.sendFriendRequest(targetUid) { result ->
+                        playerMenuUid = null
+                        socialFeedback = result.fold(
+                            onSuccess = { friendRequestSentText },
+                            onFailure = { e ->
+                                when {
+                                    e.message?.contains("already sent", ignoreCase = true) == true ->
+                                        requestAlreadySentText
+                                    else -> e.message ?: friendRequestFailedText
+                                }
                             }
-                        }
-                        Column {
-                            Text(menuName, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = if (isOwnProfile) "You" else "SoulPlay user",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF64748B)
-                            )
-                        }
-                    }
-                },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = if (isOwnProfile) "This is your mini profile." else "Choose an action for this player.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF64748B)
                         )
-                        if (!isOwnProfile) {
-                            Button(
-                                onClick = {
-                                    viewModel.sendFriendRequest(targetUid) { result ->
-                                        playerMenuUid = null
-                                        socialFeedback = result.fold(
-                                            onSuccess = { "Friend request sent" },
-                                            onFailure = { e ->
-                                                when {
-                                                    e.message?.contains("already sent", ignoreCase = true) == true ->
-                                                        "Request already sent"
-                                                    else -> e.message ?: "Could not send request"
-                                                }
-                                            }
-                                        )
-                                    }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                            ) {
-                                Text("Add friend", fontWeight = FontWeight.SemiBold, color = Color.White)
-                            }
-                            Button(
-                                onClick = {
-                                    giftRecipientUid = targetUid
-                                    playerMenuUid = null
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentPink),
-                            ) {
-                                Text("Send gift", fontWeight = FontWeight.SemiBold, color = Color.White)
-                            }
-                        }
-                        if (isOwnProfile) {
-                            Button(
-                                onClick = {
-                                    giftRecipientUid = targetUid
-                                    playerMenuUid = null
-                                    giftError = null
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentPink),
-                            ) {
-                                Text("Send gift", fontWeight = FontWeight.SemiBold, color = Color.White)
-                            }
-                            Text(
-                                text = "Add friend is hidden for your own profile.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF94A3B8),
-                            )
-                        }
                     }
                 },
-                confirmButton = {
-                    TextButton(onClick = { playerMenuUid = null }) {
-                        Text("Close")
-                    }
-                }
+                onSendGift = {
+                    giftRecipientUid = targetUid
+                    playerMenuUid = null
+                    giftError = null
+                },
+                accentBlue = AccentBlue,
+                accentPink = AccentPink,
             )
         }
 
         if (showGiftPlayerPicker) {
-            val others = slots.filter { s ->
-                !s.isEmpty &&
-                    s.firebaseUid != null &&
-                    (myUid == null || s.firebaseUid != myUid)
-            }
-            AlertDialog(
-                onDismissRequest = { showGiftPlayerPicker = false },
-                title = { Text("Send gift to") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (others.isEmpty()) {
-                            Text(
-                                text = "No other players in this room.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Color(0xFF64748B)
-                            )
-                        } else {
-                            others.forEach { s ->
-                                val uid = s.firebaseUid ?: return@forEach
-                                val label = userProfiles[uid]?.username?.takeIf { it.isNotBlank() }
-                                    ?: FirebaseUidMapping.shortLabel(uid)
-                                TextButton(
-                                    onClick = {
-                                        giftRecipientUid = uid
-                                        showGiftPlayerPicker = false
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(label, modifier = Modifier.fillMaxWidth())
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showGiftPlayerPicker = false }) {
-                        Text("Close")
-                    }
+            val others = slots
+                .filter { s ->
+                    !s.isEmpty &&
+                        s.firebaseUid != null &&
+                        (myUid == null || s.firebaseUid != myUid)
+                }
+                .mapNotNull { s ->
+                    val uid = s.firebaseUid ?: return@mapNotNull null
+                    val label = userProfiles[uid]?.username?.takeIf { it.isNotBlank() }
+                        ?: FirebaseUidMapping.shortLabel(uid)
+                    uid to label
+                }
+            VoiceRoomGiftRecipientDialog(
+                others = others,
+                onDismiss = { showGiftPlayerPicker = false },
+                onPickRecipient = { uid ->
+                    giftRecipientUid = uid
+                    showGiftPlayerPicker = false
                 }
             )
         }
 
         GiftWallDialog(
             visible = giftRecipientUid != null,
-            recipientDisplayName = giftRecipientLabel.ifBlank { "Player" },
+            recipientDisplayName = giftRecipientLabel.ifBlank { stringResource(R.string.gift_recipient_fallback) },
             items = remember { defaultGiftWallItems() },
             sending = giftSending,
             errorMessage = giftError,
@@ -547,7 +447,7 @@ fun VoiceRoomScreen(
                         giftError = null
                     }
                     r.onFailure { e ->
-                        giftError = e.message ?: "Could not send gift"
+                        giftError = e.message ?: sendGiftFailedText
                     }
                 }
             }
@@ -560,7 +460,6 @@ fun VoiceRoomScreen(
             onMicClick = {
                 if (inRoom) viewModel.toggleMute()
             },
-            onChatClick = onOpenChat,
             onGiftClick = {
                 giftError = null
                 showGiftPlayerPicker = true
@@ -1157,7 +1056,6 @@ private fun VoiceActionBar(
     inRoom: Boolean,
     isMuted: Boolean,
     onMicClick: () -> Unit,
-    onChatClick: () -> Unit,
     onGiftClick: () -> Unit,
     onCenterClick: () -> Unit,
     centerEnabled: Boolean,
@@ -1190,13 +1088,6 @@ private fun VoiceActionBar(
                             isMuted -> Color(0xFF94A3B8)
                             else -> AccentBlue
                         }
-                    )
-                }
-                IconButton(onClick = onChatClick, enabled = inRoom) {
-                    Icon(
-                        Icons.Filled.ChatBubbleOutline,
-                        contentDescription = "Chat",
-                        tint = if (inRoom) Color(0xFF64748B) else Color(0xFFCBD5E1)
                     )
                 }
                 Button(

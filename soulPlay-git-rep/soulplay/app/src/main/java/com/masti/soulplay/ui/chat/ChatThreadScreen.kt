@@ -37,9 +37,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.masti.soulplay.R
 import com.masti.soulplay.ui.voiceroom.GiftWallDialog
 import com.masti.soulplay.ui.voiceroom.defaultGiftWallItems
 import kotlinx.coroutines.launch
@@ -64,6 +66,7 @@ fun ChatThreadScreen(
     val myUid = viewModel.myUid
     val listState = rememberLazyListState()
     var draft by remember { mutableStateOf("") }
+    val sendGiftErrorText = stringResource(R.string.chat_send_gift_error)
     var showGiftDialog by remember { mutableStateOf(false) }
     var giftSending by remember { mutableStateOf(false) }
     var giftError by remember { mutableStateOf<String?>(null) }
@@ -97,7 +100,7 @@ fun ChatThreadScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_back))
                     }
                 }
             )
@@ -127,7 +130,7 @@ fun ChatThreadScreen(
                 if (messages.isEmpty()) {
                     item {
                         Text(
-                            text = "Say hi — messages are only saved between friends.",
+                            text = stringResource(R.string.chat_empty_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -180,7 +183,7 @@ fun ChatThreadScreen(
                     value = draft,
                     onValueChange = { draft = it },
                     modifier = Modifier.weight(1f),
-                    placeholder = { Text("Message…") },
+                    placeholder = { Text(stringResource(R.string.chat_input_placeholder)) },
                     maxLines = 4
                 )
                 IconButton(
@@ -189,7 +192,7 @@ fun ChatThreadScreen(
                         showGiftDialog = true
                     }
                 ) {
-                    Icon(Icons.Filled.CardGiftcard, contentDescription = "Gift")
+                    Icon(Icons.Filled.CardGiftcard, contentDescription = stringResource(R.string.gift))
                 }
                 IconButton(
                     onClick = {
@@ -202,7 +205,7 @@ fun ChatThreadScreen(
                     },
                     enabled = draft.trim().isNotEmpty()
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send")
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.send))
                 }
             }
         }
@@ -228,7 +231,7 @@ fun ChatThreadScreen(
                     showGiftDialog = false
                 }
                 result.onFailure { e ->
-                    giftError = e.message ?: "Could not send gift"
+                    giftError = e.message ?: sendGiftErrorText
                 }
             }
         }
@@ -283,18 +286,18 @@ private fun GiftMessageBubble(
                 tint = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
             )
             Text(
-                text = "Gift: ${info.giftLabel}",
+                text = stringResource(R.string.chat_gift_title, info.giftLabel),
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
             )
         }
         Text(
-            text = "Coins sent: ${info.giftCoins} 🪙",
+            text = stringResource(R.string.chat_gift_coins_sent, info.giftCoins),
             style = MaterialTheme.typography.bodySmall,
             color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
         )
         Text(
-            text = "Receiver got: +${info.receiverCoins} 🪙",
+            text = stringResource(R.string.chat_gift_receiver_coins, info.receiverCoins),
             style = MaterialTheme.typography.bodySmall,
             color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
         )

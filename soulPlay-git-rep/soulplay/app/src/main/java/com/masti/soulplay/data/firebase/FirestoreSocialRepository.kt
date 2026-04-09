@@ -160,7 +160,8 @@ class FirestoreSocialRepository(
                 mapOf("since" to FieldValue.serverTimestamp())
             )
             batch.commit().await()
-        }
+            Unit
+        }.mapFailureForUi()
     }
 
     override suspend fun declineFriendRequest(fromUid: String): Result<Unit> {
@@ -169,7 +170,8 @@ class FirestoreSocialRepository(
         val requestId = friendRequestDocId(fromUid, me)
         return runCatching {
             db.collection(COL_FRIEND_REQUESTS).document(requestId).delete().await()
-        }
+            Unit
+        }.mapFailureForUi()
     }
 
     override fun observeChatMessages(peerUid: String): Flow<List<ChatMessage>> = callbackFlow {

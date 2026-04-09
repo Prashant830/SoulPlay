@@ -26,10 +26,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.masti.soulplay.R
 
 @Composable
 fun ChatScreen(
@@ -49,12 +51,12 @@ fun ChatScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
         Text(
-            text = "Chat",
+            text = stringResource(R.string.chat_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "Friend requests and messages with friends you met in voice rooms.",
+            text = stringResource(R.string.chat_subtitle),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -80,7 +82,7 @@ fun ChatScreen(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = "Dismiss",
+                        text = stringResource(R.string.dismiss),
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         fontWeight = FontWeight.Bold,
@@ -101,7 +103,7 @@ fun ChatScreen(
         ) {
             item {
                 Text(
-                    text = "Friend requests (${incoming.size})",
+                    text = stringResource(R.string.friend_requests_count, incoming.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -109,7 +111,7 @@ fun ChatScreen(
             if (incoming.isEmpty()) {
                 item {
                     Text(
-                        text = "No pending requests.",
+                        text = stringResource(R.string.no_pending_requests),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -131,7 +133,7 @@ fun ChatScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Friends (${friends.size})",
+                    text = stringResource(R.string.friends_count, friends.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -139,7 +141,7 @@ fun ChatScreen(
             if (friends.isEmpty()) {
                 item {
                     Text(
-                        text = "No friends yet. Send a request from a voice room player card.",
+                        text = stringResource(R.string.no_friends_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -195,7 +197,7 @@ private fun FriendRequestRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Wants to be your friend",
+                    text = stringResource(R.string.friend_request_line),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp)
@@ -209,10 +211,10 @@ private fun FriendRequestRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Button(onClick = onAccept, modifier = Modifier.weight(1f)) {
-                Text("Accept")
+                Text(stringResource(R.string.accept))
             }
             OutlinedButton(onClick = onDecline, modifier = Modifier.weight(1f)) {
-                Text("Decline")
+                Text(stringResource(R.string.decline))
             }
         }
     }

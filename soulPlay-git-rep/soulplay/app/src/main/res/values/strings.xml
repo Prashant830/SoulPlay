@@ -3,4 +3,43 @@
     <!-- Put your OAuth client id from Google Console / Firebase.
          You can find it in google-services.json as `default_web_client_id`. -->
     <string name="default_web_client_id">315234415435-eq1io03q8f07dushhvfvnvrtohit3ee2.apps.googleusercontent.com</string>
+
+    <!-- Chat -->
+    <string name="chat_title">Chat</string>
+    <string name="chat_subtitle">Friend requests and messages with friends you met in voice rooms.</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="friend_requests_count">Friend requests (%1$d)</string>
+    <string name="no_pending_requests">No pending requests.</string>
+    <string name="friends_count">Friends (%1$d)</string>
+    <string name="no_friends_hint">No friends yet. Send a request from a voice room player card.</string>
+    <string name="friend_request_line">Wants to be your friend</string>
+    <string name="accept">Accept</string>
+    <string name="decline">Decline</string>
+    <string name="chat_back">Back</string>
+    <string name="chat_empty_hint">Say hi — messages are only saved between friends.</string>
+    <string name="chat_input_placeholder">Message…</string>
+    <string name="gift">Gift</string>
+    <string name="send">Send</string>
+    <string name="chat_send_gift_error">Could not send gift</string>
+    <string name="chat_gift_title">Gift: %1$s</string>
+    <string name="chat_gift_coins_sent">Coins sent: %1$d 🪙</string>
+    <string name="chat_gift_receiver_coins">Receiver got: +%1$d 🪙</string>
+
+    <!-- Voice room mini profile / dialogs -->
+    <string name="profile_photo_cd">Profile photo</string>
+    <string name="you">You</string>
+    <string name="soulplay_user">SoulPlay user</string>
+    <string name="mini_profile_self_desc">This is your mini profile.</string>
+    <string name="mini_profile_other_desc">Choose an action for this player.</string>
+    <string name="friend_request_sent">Friend request sent</string>
+    <string name="request_already_sent">Request already sent</string>
+    <string name="friend_request_failed">Could not send request</string>
+    <string name="add_friend">Add friend</string>
+    <string name="send_gift">Send gift</string>
+    <string name="add_friend_hidden_self">Add friend is hidden for your own profile.</string>
+    <string name="close">Close</string>
+    <string name="send_gift_to">Send gift to</string>
+    <string name="no_other_players">No other players in this room.</string>
+    <string name="gift_recipient_fallback">Player</string>
+    <string name="send_gift_failed">Could not send gift</string>
 </resources>
