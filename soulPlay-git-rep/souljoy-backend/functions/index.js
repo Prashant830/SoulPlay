@@ -122,7 +122,7 @@ exports.timerEngine = functions.scheduler.onSchedule("every 1 minutes", async (e
                 case "MANTRI_CONFIRM":
                     await roomGameRef.update({
                         phase: "VOICE_DISCUSSION",
-                        timerEndAt: now + 120000
+                        timerEndAt: now + 60000
                     });
                     break;
 
