@@ -8,9 +8,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:315234415435:android:85409c6f73938f908e6ece",
+        "mobilesdk_app_id": "1:315234415435:android:34f7a3ef8eef97ab8e6ece",
         "android_client_info": {
-          "package_name": "com.masti.soulplay"
+          "package_name": "com.souljoy.soulmasti"
         }
       },
       "oauth_client": [

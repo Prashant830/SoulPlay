@@ -28,7 +28,7 @@
         tools:replace="android:allowBackup,android:label,android:icon,android:roundIcon,android:theme,android:dataExtractionRules,android:fullBackupContent">
 
         <activity
-            android:name="com.masti.soulplay.MainActivity"
+            android:name="com.souljoy.soulmasti.MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
             android:windowSoftInputMode="adjustResize"

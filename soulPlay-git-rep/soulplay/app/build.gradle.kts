@@ -11,12 +11,20 @@ val localProperties = Properties().apply {
 }
 val agoraAppId: String = localProperties.getProperty("AGORA_APP_ID", "")
 
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKeystore: Boolean = keystorePropertiesFile.exists()
+
 android {
-    namespace = "com.masti.soulplay"
+    namespace = "com.souljoy.soulmasti"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.masti.soulplay"
+        applicationId = "com.souljoy.soulmasti"
         minSdk = 24
         targetSdk = 35
         versionCode = 1
@@ -26,6 +34,23 @@ android {
         buildConfigField("String", "AGORA_APP_ID", "\"$agoraAppId\"")
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                val storePwd = keystoreProperties.getProperty("storePassword")
+                    ?: error("keystore.properties: storePassword is required")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                    ?: error("keystore.properties: keyAlias is required")
+                keyPassword = keystoreProperties.getProperty("keyPassword", storePwd)
+                storePassword = storePwd
+                storeFile = rootProject.file(
+                    keystoreProperties.getProperty("storeFile")
+                        ?: error("keystore.properties: storeFile is required"),
+                )
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -33,7 +58,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -93,4 +122,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.agora.rtc:voice-rtc-basic:4.6.3")
+    implementation("com.android.billingclient:billing:7.0.0")
 }
