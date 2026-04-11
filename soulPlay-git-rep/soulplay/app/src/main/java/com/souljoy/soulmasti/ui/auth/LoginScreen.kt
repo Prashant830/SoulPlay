@@ -39,8 +39,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import org.koin.androidx.compose.koinViewModel
 import androidx.activity.result.ActivityResult
-import com.souljoy.soulmasti.R
 import androidx.compose.ui.text.style.TextAlign
+import com.souljoy.soulmasti.R
 
 @Composable
 fun LoginScreen(
@@ -51,16 +51,19 @@ fun LoginScreen(
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
 
-    val webClientId = stringResource(id = R.string.default_web_client_id)
-    val canSignInWithGoogle = webClientId.isNotBlank() && webClientId != "CHANGE_ME"
+    val webClientId = stringResource(id = R.string.default_web_client_id).trim()
+    val canSignInWithGoogle =
+        webClientId.isNotBlank() &&
+            webClientId != "CHANGE_ME" &&
+            webClientId.endsWith(".apps.googleusercontent.com")
 
-    val googleSignInClient = remember {
-        // Requires you to set `default_web_client_id` in `res/values/strings.xml`
-        GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+    // Rebuild client if the string changes; must use Web OAuth client id (same as Firebase → Auth → Google).
+    val googleSignInClient = remember(webClientId, context) {
+        val opts = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestIdToken(webClientId)
             .build()
-            .let { GoogleSignIn.getClient(context, it) }
+        GoogleSignIn.getClient(context, opts)
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -68,22 +71,36 @@ fun LoginScreen(
     ) { result: ActivityResult ->
         val data = result.data
         if (result.resultCode != Activity.RESULT_OK || data == null) {
-            // If user cancels / something goes wrong, surface a UI error.
             vm.signInWithGoogleIdToken(idToken = null, onDone = onRegistered)
             return@rememberLauncherForActivityResult
         }
         val task = GoogleSignIn.getSignedInAccountFromIntent(data)
         try {
             val account = task.getResult(ApiException::class.java)
-            vm.signInWithGoogleIdToken(account.idToken, onDone = onRegistered)
+            val token = account.idToken
+            if (token.isNullOrBlank()) {
+                vm.signInWithGoogleIdToken(
+                    idToken = null,
+                    onDone = onRegistered,
+                    accountResolvedButNoIdToken = true,
+                )
+            } else {
+                vm.signInWithGoogleIdToken(token, onDone = onRegistered)
+            }
         } catch (e: ApiException) {
-            // Trigger error in view model by passing null id token.
-            vm.signInWithGoogleIdToken(null, onDone = onRegistered)
+            vm.signInWithGoogleIdToken(
+                idToken = null,
+                onDone = onRegistered,
+                googlePlayServicesStatusCode = e.statusCode,
+            )
         }
     }
 
     val startGoogleSignIn: () -> Unit = {
-        launcher.launch(googleSignInClient.signInIntent)
+        // Clear prior session so Play services requests a fresh ID token (avoids null idToken after config/SHA changes).
+        googleSignInClient.signOut().addOnCompleteListener {
+            launcher.launch(googleSignInClient.signInIntent)
+        }
     }
 
     Box(

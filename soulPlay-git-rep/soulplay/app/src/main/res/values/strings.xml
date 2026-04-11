@@ -2,7 +2,7 @@
     <string name="app_name">SoulMasti</string>
     <!-- Put your OAuth client id from Google Console / Firebase.
          You can find it in google-services.json as `default_web_client_id`. -->
-    <string name="default_web_client_id">315234415435-eq1io03q8f07dushhvfvnvrtohit3ee2.apps.googleusercontent.com</string>
+    <string name="default_web_client_id">728847710661-0r9caaqc62jbmi14s8cfksffolajsco0.apps.googleusercontent.com</string>
 
     <!-- Chat -->
     <string name="chat_title">Chat</string>
