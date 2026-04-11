@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "chatcouple-a1d18"
-  }
+    "default": "soulmasti",
+    "y": "soulmasti"
+  },
+  "targets": {},
+  "etags": {}
 }
