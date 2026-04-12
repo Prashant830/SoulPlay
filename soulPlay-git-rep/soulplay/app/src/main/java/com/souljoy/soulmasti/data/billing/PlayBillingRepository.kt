@@ -14,6 +14,7 @@ import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.ProductDetails
 import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryPurchasesParams
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlin.coroutines.resume
@@ -77,6 +78,43 @@ class PlayBillingRepository(
         })
     }
 
+    suspend fun awaitConnection(): Boolean = suspendCoroutine { cont ->
+        startConnection { ok -> cont.resume(ok) }
+    }
+
+    /**
+     * Returns owned in-app purchases that are not yet consumed (e.g. slow test card completed after leaving the shop).
+     * Per Google Play guidelines, call this on billing setup and when resuming the app, not only [onPurchasesUpdated].
+     */
+    suspend fun queryPurchasesInApp(): List<Purchase> = suspendCoroutine { cont ->
+        val bc = billingClient
+        if (bc == null || !bc.isReady) {
+            logW("queryPurchasesInApp: billing not ready")
+            cont.resume(emptyList())
+            return@suspendCoroutine
+        }
+        val params = QueryPurchasesParams.newBuilder()
+            .setProductType(BillingClient.ProductType.INAPP)
+            .build()
+        bc.queryPurchasesAsync(params) { billingResult, purchases ->
+            if (billingResult.responseCode != BillingClient.BillingResponseCode.OK) {
+                logW(
+                    "queryPurchasesInApp: code=${billingResult.responseCode} msg=${billingResult.debugMessage}",
+                )
+                cont.resume(emptyList())
+            } else {
+                val list = purchases ?: emptyList()
+                logD("queryPurchasesInApp: count=${list.size}")
+                list.forEach { p ->
+                    logD(
+                        "  purchase products=${p.products} state=${p.purchaseState} acknowledged=${p.isAcknowledged}",
+                    )
+                }
+                cont.resume(list)
+            }
+        }
+    }
+
     fun queryCoinProducts(callback: (BillingResult, List<ProductDetails>) -> Unit) {
         val bc = billingClient
         if (bc == null || !bc.isReady) {
@@ -121,6 +159,11 @@ class PlayBillingRepository(
             callback(billingResult, sorted)
         }
     }
+
+    suspend fun queryCoinProductsSuspend(): Pair<BillingResult, List<ProductDetails>> =
+        suspendCoroutine { cont ->
+            queryCoinProducts { result, list -> cont.resume(result to list) }
+        }
 
     fun launchBillingFlow(activity: Activity, productDetails: ProductDetails): BillingResult {
         val bc = billingClient

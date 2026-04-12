@@ -16,6 +16,7 @@ import com.souljoy.soulmasti.domain.model.RoomEmojiEvent
 import com.souljoy.soulmasti.domain.model.MatchOutcome
 import com.souljoy.soulmasti.domain.RoomJoinEconomy
 import com.souljoy.soulmasti.domain.model.PlayerInRoom
+import com.souljoy.soulmasti.data.billing.PurchaseTokenHasher
 import com.souljoy.soulmasti.domain.repository.GameSessionRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -197,6 +198,46 @@ class FirebaseGameSessionRepository(
                 override fun doTransaction(currentData: MutableData): Transaction.Result {
                     val v = parseLong(currentData.value) ?: 0L
                     currentData.value = v + amount
+                    return Transaction.success(currentData)
+                }
+
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    currentData: DataSnapshot?,
+                ) {
+                    when {
+                        error != null -> cont.resumeWithException(error.toException())
+                        !committed -> cont.resumeWithException(IllegalStateException("Could not credit coins."))
+                        else -> cont.resume(Unit)
+                    }
+                }
+            })
+        }
+    }
+
+    override suspend fun hasPlayPurchaseBeenApplied(purchaseToken: String): Boolean {
+        val uid = requireUid()
+        val key = PurchaseTokenHasher.sha256Hex(purchaseToken)
+        val snap =
+            database.reference.child("users").child(uid).child("iapTokens").child(key).get().await()
+        return snap.exists()
+    }
+
+    override suspend fun applyPurchasedCoinsForPlayPurchase(purchaseToken: String, amount: Long) {
+        if (amount <= 0L) return
+        val uid = requireUid()
+        val key = PurchaseTokenHasher.sha256Hex(purchaseToken)
+        val userRef = database.reference.child("users").child(uid)
+        suspendCancellableCoroutine { cont ->
+            userRef.runTransaction(object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    if (currentData.child("iapTokens").child(key).value != null) {
+                        return Transaction.success(currentData)
+                    }
+                    val v = parseLong(currentData.child("totalWinnings").value) ?: 0L
+                    currentData.child("totalWinnings").value = v + amount
+                    currentData.child("iapTokens").child(key).value = true
                     return Transaction.success(currentData)
                 }
 

@@ -6,8 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.ProductDetails
-import com.android.billingclient.api.Purchase
-import com.souljoy.soulmasti.BuildConfig
+import com.souljoy.soulmasti.data.billing.CoinPurchaseCoordinator
 import com.souljoy.soulmasti.data.billing.InAppCoinProducts
 import com.souljoy.soulmasti.data.billing.PlayBillingRepository
 import com.souljoy.soulmasti.domain.repository.GameSessionRepository
@@ -31,6 +30,7 @@ data class GoldShopUiState(
 class GoldShopViewModel(
     private val billing: PlayBillingRepository,
     private val game: GameSessionRepository,
+    private val coinPurchases: CoinPurchaseCoordinator,
 ) : ViewModel() {
 
     private fun logD(msg: String) {
@@ -48,15 +48,24 @@ class GoldShopViewModel(
         game.observeUserTotalWinnings()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val processedPurchaseTokens = mutableSetOf<String>()
-
     init {
         viewModelScope.launch {
             billing.purchaseEvents.collect { event ->
                 when (event) {
                     is PlayBillingRepository.PurchaseResult.Success -> {
                         logD("purchaseEvents: Success count=${event.purchases.size}")
-                        event.purchases.forEach { processPurchase(it) }
+                        val products = _uiState.value.products
+                        event.purchases.forEach { purchase ->
+                            val msg = runCatching {
+                                coinPurchases.handlePurchaseFromPlay(purchase, products)
+                            }.getOrElse { e ->
+                                logW("purchaseEvents: handlePurchase failed", e)
+                                null
+                            }
+                            if (msg != null) {
+                                _uiState.update { it.copy(userMessage = msg) }
+                            }
+                        }
                     }
                     PlayBillingRepository.PurchaseResult.UserCanceled -> {
                         logD("purchaseEvents: UserCanceled")
@@ -120,92 +129,47 @@ class GoldShopViewModel(
                 }
             }
         }
+        val products = _uiState.value.products
+        val syncMsg = runCatching {
+            coinPurchases.reconcilePendingPurchases(knownProducts = products)
+        }.getOrElse { e ->
+            logW("refreshProducts: reconcile failed", e)
+            null
+        }
+        if (syncMsg != null) {
+            _uiState.update { it.copy(userMessage = syncMsg) }
+        }
     }
 
     fun launchPurchase(activity: Activity, productDetails: ProductDetails) {
         logD("launchPurchase: ${productDetails.productId}")
         val result = billing.launchBillingFlow(activity, productDetails)
-        if (result.responseCode != BillingClient.BillingResponseCode.OK) {
-            logW("launchPurchase failed: ${result.responseCode} ${result.debugMessage}")
-            _uiState.update {
-                it.copy(userMessage = billingMessage(result.responseCode, result.debugMessage))
+        when (result.responseCode) {
+            BillingClient.BillingResponseCode.OK -> Unit
+            BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED -> {
+                logW("launchPurchase: ITEM_ALREADY_OWNED — reconciling pending purchase")
+                viewModelScope.launch {
+                    val msg = runCatching {
+                        coinPurchases.reconcilePendingPurchases(knownProducts = _uiState.value.products)
+                    }.getOrElse { e ->
+                        logW("launchPurchase: reconcile after ITEM_ALREADY_OWNED failed", e)
+                        "You already have a pending purchase. Open the gold shop again to finish syncing."
+                    }
+                    if (msg != null) {
+                        _uiState.update { it.copy(userMessage = msg) }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                userMessage = "Finishing a previous purchase — check your gold balance in a moment.",
+                            )
+                        }
+                    }
+                }
             }
-        }
-    }
-
-    private fun processPurchase(purchase: Purchase) {
-        logD(
-            "processPurchase: products=${purchase.products} state=${purchase.purchaseState} token=${purchase.purchaseToken.take(16)}…",
-        )
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) {
-            if (purchase.purchaseState == Purchase.PurchaseState.PENDING) {
-                logD("processPurchase: pending — waiting for user")
+            else -> {
+                logW("launchPurchase failed: ${result.responseCode} ${result.debugMessage}")
                 _uiState.update {
-                    it.copy(userMessage = "Payment is pending. Complete it in the Play Store, then reopen the shop.")
-                }
-            }
-            return
-        }
-        synchronized(processedPurchaseTokens) {
-            if (purchase.purchaseToken in processedPurchaseTokens) {
-                logD("processPurchase: skip duplicate token")
-                return
-            }
-        }
-        val sku = purchase.products.firstOrNull() ?: run {
-            logW("processPurchase: no product id on purchase")
-            return
-        }
-
-        viewModelScope.launch {
-            var details = _uiState.value.products.find { it.productId == sku }
-            if (details == null) {
-                logD("processPurchase: no cached ProductDetails for $sku — refreshProducts")
-                refreshProducts()
-                details = _uiState.value.products.find { it.productId == sku }
-            }
-            val coins = details?.let { InAppCoinProducts.coinsFromProductDetails(it) }
-            logD("processPurchase: sku=$sku coins=$coins detailsFound=${details != null}")
-            if (coins == null || coins <= 0L) {
-                logW("processPurchase: could not parse coins for sku=$sku name=${details?.name} title=${details?.title}")
-                _uiState.update {
-                    it.copy(
-                        userMessage = "Could not read coin amount from Play Store for this product. In Play Console, set the product name to digits only (e.g. 400), then reopen the shop.",
-                    )
-                }
-                return@launch
-            }
-
-            // Play Store allows quantity > 1 on checkout; [Purchase.getQuantity] reflects that.
-            val quantity = purchase.quantity.coerceAtLeast(1)
-            val totalCoins = coins * quantity.toLong()
-
-            runCatching {
-                game.addPurchasedCoins(totalCoins)
-            }.onFailure { e ->
-                logW("processPurchase: addPurchasedCoins failed", e)
-                _uiState.update {
-                    it.copy(userMessage = e.message ?: "Could not add coins. Contact support.")
-                }
-            }.onSuccess {
-                logD("processPurchase: credited total=$totalCoins (qty=$quantity × $coins per pack), acknowledge + consume")
-                synchronized(processedPurchaseTokens) {
-                    processedPurchaseTokens.add(purchase.purchaseToken)
-                }
-                billing.acknowledgePurchase(purchase)
-                val consumeResult = billing.consumePurchase(purchase)
-                if (consumeResult.responseCode != BillingClient.BillingResponseCode.OK &&
-                    consumeResult.responseCode != BillingClient.BillingResponseCode.ITEM_NOT_OWNED
-                ) {
-                    logW("processPurchase: consume result=${consumeResult.responseCode} ${consumeResult.debugMessage}")
-                }
-                val msg = if (quantity > 1) {
-                    "Added $totalCoins gold ($quantity × $coins per pack)."
-                } else {
-                    "Added $totalCoins gold to your balance."
-                }
-                _uiState.update {
-                    it.copy(userMessage = msg)
+                    it.copy(userMessage = billingMessage(result.responseCode, result.debugMessage))
                 }
             }
         }
@@ -219,6 +183,8 @@ class GoldShopViewModel(
                 BillingClient.BillingResponseCode.ITEM_UNAVAILABLE ->
                     "This pack is not available yet. Check Play Console product is active."
                 BillingClient.BillingResponseCode.USER_CANCELED -> "Purchase canceled."
+                BillingClient.BillingResponseCode.ITEM_ALREADY_OWNED ->
+                    "A purchase for this pack is still pending in Play. Reopen the gold shop to sync."
                 else -> "Billing error ($code)."
             }
         }

@@ -19,7 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -51,6 +54,7 @@ import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
+import com.souljoy.soulmasti.data.billing.CoinPurchaseCoordinator
 import com.souljoy.soulmasti.domain.repository.SocialRepository
 
 private data class BottomTab(
@@ -73,6 +77,13 @@ fun SoulplayApp(
     modifier: Modifier = Modifier
 ) {
     val navController = rememberNavController()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val coinPurchaseSync: CoinPurchaseCoordinator = koinInject()
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            runCatching { coinPurchaseSync.reconcilePendingPurchases() }
+        }
+    }
     val socialRepository: SocialRepository = koinInject<SocialRepository>()
     val incomingFriendRequests by socialRepository.incomingFriendRequests.collectAsStateWithLifecycle()
     val unreadByPeer by socialRepository.unreadMessageCounts.collectAsStateWithLifecycle()

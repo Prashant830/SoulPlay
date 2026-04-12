@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.souljoy.soulmasti.data.billing.CoinPurchaseCoordinator
 import com.souljoy.soulmasti.data.billing.PlayBillingRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGameSessionRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGiftRepository
@@ -34,11 +35,12 @@ val appModule = module {
     single { FirebaseStorage.getInstance() }
     single<GameSessionRepository> { FirebaseGameSessionRepository(get(), get()) }
     single { PlayBillingRepository(androidApplication()) }
+    single { CoinPurchaseCoordinator(get(), get()) }
     single<GiftRepository> { FirebaseGiftRepository(get(), get()) }
     single<SocialRepository> { FirestoreSocialRepository(get(), get()) }
     single<VoiceRoomRepository> { AgoraVoiceRoomRepository(androidContext()) }
     viewModel { HomeViewModel(androidApplication(), get()) }
-    viewModel { GoldShopViewModel(get(), get()) }
+    viewModel { GoldShopViewModel(get(), get(), get()) }
     viewModel { AuthGateViewModel(get(), get()) }
     viewModel { LoginViewModel(get()) }
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }

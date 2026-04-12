@@ -38,6 +38,15 @@ interface GameSessionRepository {
      */
     suspend fun addPurchasedCoins(amount: Long)
 
+    /** Whether `users/{uid}/iapTokens/{sha256(token)}` is already set (coins were applied for this purchase). */
+    suspend fun hasPlayPurchaseBeenApplied(purchaseToken: String): Boolean
+
+    /**
+     * Atomically credits [amount] once per Play [purchaseToken] (writes under `users/{uid}/iapTokens/`).
+     * Safe to call concurrently or after retries; duplicate credits are prevented in one transaction.
+     */
+    suspend fun applyPurchasedCoinsForPlayPurchase(purchaseToken: String, amount: Long)
+
     /**
      * Atomically subtracts [com.souljoy.soulmasti.domain.RoomJoinEconomy.JOIN_ROOM_FEE_COINS] from
      * `users/{uid}/totalWinnings`. Fails if balance is insufficient.
