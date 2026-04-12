@@ -1,3 +1,5 @@
+import com.android.build.api.dsl.ApplicationExtension
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -74,6 +76,57 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+}
+
+// Versioned output names (AGP 9 new DSL has no stable applicationVariants.outputs API here):
+//   APK: build/outputs/apk/<debug|release>/SoulMasti-<type>-v<versionName>-<versionCode>.apk
+//   AAB: build/outputs/bundle/release/SoulMasti-release-v<versionName>-<versionCode>.aab
+afterEvaluate {
+    fun versionPair(): Pair<String, Int> {
+        val app = extensions.getByType(ApplicationExtension::class.java)
+        val vn = app.defaultConfig.versionName ?: "0"
+        val vc = app.defaultConfig.versionCode ?: 0
+        return vn to vc
+    }
+
+    fun renameApkIn(dir: File, buildType: String) {
+        if (!dir.isDirectory) return
+        val (vn, vc) = versionPair()
+        val destName = "SoulMasti-${buildType}-v${vn}-${vc}.apk"
+        val dest = File(dir, destName)
+        val src = dir.listFiles()
+            ?.filter { it.isFile && it.extension == "apk" && it.name.startsWith("app-") }
+            ?.maxByOrNull { it.lastModified() }
+            ?: return
+        if (src.name == destName) return
+        if (dest.exists()) dest.delete()
+        if (!src.renameTo(dest)) {
+            src.copyTo(dest, overwrite = true)
+            src.delete()
+        }
+    }
+
+    listOf("debug" to "assembleDebug", "release" to "assembleRelease").forEach { (type, taskName) ->
+        tasks.findByName(taskName)?.doLast {
+            renameApkIn(
+                layout.buildDirectory.dir("outputs/apk/$type").get().asFile,
+                type,
+            )
+        }
+    }
+
+    tasks.findByName("bundleRelease")?.doLast {
+        val (vn, vc) = versionPair()
+        val dir = layout.buildDirectory.dir("outputs/bundle/release").get().asFile
+        val src = dir.listFiles()?.firstOrNull { it.isFile && it.extension == "aab" } ?: return@doLast
+        val dest = File(dir, "SoulMasti-release-v${vn}-${vc}.aab")
+        if (src.absolutePath == dest.absolutePath) return@doLast
+        if (dest.exists()) dest.delete()
+        if (!src.renameTo(dest)) {
+            src.copyTo(dest, overwrite = true)
+            src.delete()
+        }
     }
 }
 
