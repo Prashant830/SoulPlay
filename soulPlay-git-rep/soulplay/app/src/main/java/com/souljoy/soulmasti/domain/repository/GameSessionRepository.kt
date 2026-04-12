@@ -2,6 +2,7 @@ package com.souljoy.soulmasti.domain.repository
 
 import com.souljoy.soulmasti.domain.model.GameHistoryEntry
 import com.souljoy.soulmasti.domain.model.GameRoomSnapshot
+import com.souljoy.soulmasti.domain.model.RoomEmojiEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -32,6 +33,12 @@ interface GameSessionRepository {
     suspend fun getCoinBalance(): Long
 
     /**
+     * Adds [amount] coins to `users/{uid}/totalWinnings` (e.g. after a verified in-app purchase).
+     * Prefer server-side verification in production; this is client-side only.
+     */
+    suspend fun addPurchasedCoins(amount: Long)
+
+    /**
      * Atomically subtracts [com.souljoy.soulmasti.domain.RoomJoinEconomy.JOIN_ROOM_FEE_COINS] from
      * `users/{uid}/totalWinnings`. Fails if balance is insufficient.
      * @return balance after deduction
@@ -46,4 +53,10 @@ interface GameSessionRepository {
      * and `status` is ENDED (roles/scores from `gameState`).
      */
     fun observeUserGameHistory(): Flow<List<GameHistoryEntry>>
+
+    /** Broadcast a reaction emoji to everyone in the room (see [observeRoomEmojiEvents]). */
+    suspend fun sendRoomEmoji(roomId: String, emoji: String)
+
+    /** New emoji events (child pushes under `rooms/{roomId}/emojiEvents`). */
+    fun observeRoomEmojiEvents(roomId: String): Flow<RoomEmojiEvent>
 }

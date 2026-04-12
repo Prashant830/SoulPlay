@@ -42,4 +42,40 @@
     <string name="no_other_players">No other players in this room.</string>
     <string name="gift_recipient_fallback">Player</string>
     <string name="send_gift_failed">Could not send gift</string>
+
+    <!-- Gold shop / Play Billing -->
+    <string name="gold_shop_title">Gold Shop</string>
+    <string name="gold_shop_back">Back</string>
+    <string name="gold_shop_balance_label">Balance</string>
+    <string name="gold_shop_loading">Loading offers…</string>
+    <string name="gold_shop_gold_suffix">Coins</string>
+    <string name="gold_shop_gift_broadcast">Includes gift broadcast</string>
+    <string name="gold_shop_promo_dates">Limited-time bonus — check Play for current offers (prices from Google Play).</string>
+    <string name="gold_shop_promo_headline">Recharge gold — packs shown with live Play Store prices</string>
+    <string name="gold_shop_promo_sub">Each pack credits your in-app balance after purchase completes.</string>
+    <string name="gold_shop_footer_1">1) If gold does not appear within a few minutes, restart the app or contact support at ps962630@gmail.com.</string>
+    <string name="gold_shop_footer_2">2) Do not buy or sell coins outside the official store; violations may lead to account suspension.</string>
+    <string name="gold_shop_footer_3">3) If you are under 18, get parental consent before purchasing and spend responsibly.</string>
+
+    <!-- Voice room — game phases (Soul Masti) -->
+    <string name="game_phase_raja_title">Raja’s turn</string>
+    <string name="game_phase_raja_body">Raja: use voice in the room and confirm your identity.</string>
+    <string name="game_phase_mantri_confirm_title">Mantri’s turn</string>
+    <string name="game_phase_mantri_confirm_body">Mantri: use voice in the room and confirm your identity.</string>
+    <string name="game_phase_voice_discussion_title">Open discussion</string>
+    <string name="game_phase_voice_discussion_body">Raja tells Mantri to find Chor and Sipahi. Everyone else can discuss and plan together.</string>
+    <string name="game_phase_mantri_guess_title">Mantri’s guess</string>
+    <string name="game_phase_mantri_guess_body">Mantri: guess who is Chor and Sipahi — tap the center action when it’s your turn to pick.</string>
+    <string name="game_phase_game_over_title">Round finished</string>
+    <string name="game_phase_game_over_body">Scores and results are shown below when available.</string>
+    <string name="game_phase_unknown_title">Syncing…</string>
+    <string name="game_phase_unknown_body">Waiting for the live game phase from the server.</string>
+    <string name="game_room_status_line">Room status: %1$s</string>
+    <string name="game_timer_remaining">Time left: %1$d s</string>
+    <string name="game_timer_server_wait">Syncing next phase… %1$d s</string>
+    <string name="game_timer_server_wait_hint">The server can take 1–2 min to update. Hang tight.</string>
+    <string name="room_emoji_picker_title">Send a reaction</string>
+    <string name="room_emoji_cd">Send emoji reaction</string>
+    <string name="game_voice_peers_line">Voice: %1$d connected</string>
+    <string name="center_action_make_guess">GUESS CHOR</string>
 </resources>

@@ -4,6 +4,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.souljoy.soulmasti.data.billing.PlayBillingRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGameSessionRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGiftRepository
 import com.souljoy.soulmasti.data.firebase.FirestoreSocialRepository
@@ -19,6 +20,7 @@ import com.souljoy.soulmasti.ui.home.HomeViewModel
 import com.souljoy.soulmasti.ui.chat.ChatThreadViewModel
 import com.souljoy.soulmasti.ui.chat.ChatViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
+import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
@@ -31,10 +33,12 @@ val appModule = module {
     single { FirebaseFirestore.getInstance() }
     single { FirebaseStorage.getInstance() }
     single<GameSessionRepository> { FirebaseGameSessionRepository(get(), get()) }
+    single { PlayBillingRepository(androidApplication()) }
     single<GiftRepository> { FirebaseGiftRepository(get(), get()) }
     single<SocialRepository> { FirestoreSocialRepository(get(), get()) }
     single<VoiceRoomRepository> { AgoraVoiceRoomRepository(androidContext()) }
     viewModel { HomeViewModel(androidApplication(), get()) }
+    viewModel { GoldShopViewModel(get(), get()) }
     viewModel { AuthGateViewModel(get(), get()) }
     viewModel { LoginViewModel(get()) }
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }

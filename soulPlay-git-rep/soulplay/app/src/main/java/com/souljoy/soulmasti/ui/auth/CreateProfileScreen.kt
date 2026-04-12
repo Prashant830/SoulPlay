@@ -2,6 +2,7 @@ package com.souljoy.soulmasti.ui.auth
 
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,9 +61,11 @@ private val AuthTextDark = Color(0xFF0B071A)
 @Composable
 fun CreateProfileScreen(
     onCreated: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
     vm: CreateProfileViewModel = koinViewModel(),
 ) {
+    BackHandler(onBack = onBack)
     var username by remember { mutableStateOf("") }
     var gender by remember { mutableStateOf("Male") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
@@ -94,6 +98,7 @@ fun CreateProfileScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(Color.White)
             .padding(horizontal = 24.dp),
     ) {

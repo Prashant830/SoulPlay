@@ -9,6 +9,7 @@ import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.gift.GiftCatalog
 import com.souljoy.soulmasti.domain.gift.GiftSendContext
 import com.souljoy.soulmasti.domain.model.GameRoomSnapshot
+import com.souljoy.soulmasti.domain.model.RoomEmojiEvent
 import com.souljoy.soulmasti.domain.model.VoiceConnectionState
 import com.souljoy.soulmasti.domain.repository.GameSessionRepository
 import com.souljoy.soulmasti.domain.repository.GiftRepository
@@ -56,11 +57,23 @@ class VoiceRoomViewModel(
     private val _giftBannerEvents = MutableSharedFlow<GiftBannerUi>(extraBufferCapacity = 32)
     val giftBannerEvents: SharedFlow<GiftBannerUi> = _giftBannerEvents.asSharedFlow()
 
+    private val _roomEmojiEvents = MutableSharedFlow<RoomEmojiEvent>(extraBufferCapacity = 64)
+    val roomEmojiEvents: SharedFlow<RoomEmojiEvent> = _roomEmojiEvents.asSharedFlow()
+
+    /** Ignore emoji pushes that predate this screen session (avoids replay floods from RTDB). */
+    private val roomEmojiSessionStartMs = System.currentTimeMillis()
+
     init {
         viewModelScope.launch {
             game.observeRoom(roomId).collect { snap ->
                 _roomSnapshot.value = snap
                 preloadProfiles(snap?.players?.keys.orEmpty())
+            }
+        }
+        viewModelScope.launch {
+            game.observeRoomEmojiEvents(roomId).collect { event ->
+                if (event.sentAt < roomEmojiSessionStartMs - 5_000L) return@collect
+                _roomEmojiEvents.emit(event)
             }
         }
         viewModelScope.launch {
@@ -71,6 +84,7 @@ class VoiceRoomViewModel(
                 _giftBannerEvents.emit(
                     GiftBannerUi(
                         eventId = event.eventId,
+                        giftId = event.giftId,
                         senderDisplay = senderDisplay,
                         giftDisplayName = GiftCatalog.displayLabel(event.giftId),
                         recipientDisplay = recipientDisplay,
@@ -143,6 +157,12 @@ class VoiceRoomViewModel(
     fun toggleMute() {
         viewModelScope.launch {
             voice.toggleMute()
+        }
+    }
+
+    fun sendRoomEmoji(emoji: String) {
+        viewModelScope.launch {
+            runCatching { game.sendRoomEmoji(roomId, emoji) }
         }
     }
 

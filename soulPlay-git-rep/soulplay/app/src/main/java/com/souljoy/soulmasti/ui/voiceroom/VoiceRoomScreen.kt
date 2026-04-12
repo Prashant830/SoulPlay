@@ -1,11 +1,15 @@
 package com.souljoy.soulmasti.ui.voiceroom
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,13 +19,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,14 +57,17 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -77,8 +87,11 @@ import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.model.GamePhase
 import com.souljoy.soulmasti.domain.model.GameRoomSnapshot
 import com.souljoy.soulmasti.domain.model.VoiceConnectionState
+import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
+import com.souljoy.soulmasti.ui.common.gift.rememberGiftCelebrationQueue
 import coil.compose.AsyncImage
 import kotlin.math.PI
+import kotlin.random.Random
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sin
@@ -89,6 +102,21 @@ private val AccentBlue = Color(0xFF2563EB)
 private val AccentPink = Color(0xFFEC4899)
 private val LiveGreen = Color(0xFF22C55E)
 private val SeatNeutralRing = Color(0xFF64748B)
+
+private sealed interface PhaseTimerDisplay {
+    data class Countdown(val seconds: Long) : PhaseTimerDisplay
+    data class ServerWait(val sinceExpirySec: Int) : PhaseTimerDisplay
+}
+
+private data class EmojiFloatUi(
+    val key: String,
+    val emoji: String,
+    val hFraction: Float,
+    val senderUid: String,
+)
+
+private val RoomQuickReactionEmojis =
+    listOf("😀", "😂", "😍", "🔥", "👏", "🎉", "❤️", "😮", "🙏", "💯", "😈", "🤫")
 
 private fun roleRingColor(roleRaw: String?): Color = when (roleRaw?.uppercase()) {
     "RAJA" -> Color(0xFFD97706)
@@ -173,7 +201,24 @@ fun VoiceRoomScreen(
     var playerMenuUid by remember { mutableStateOf<String?>(null) }
     var socialFeedback by remember { mutableStateOf<String?>(null) }
     var showGiftPlayerPicker by remember { mutableStateOf(false) }
+    var showEmojiPicker by remember { mutableStateOf(false) }
+    BackHandler {
+        when {
+            showEmojiPicker -> showEmojiPicker = false
+            giftRecipientUid != null -> {
+                giftRecipientUid = null
+                giftError = null
+            }
+            showGiftPlayerPicker -> showGiftPlayerPicker = false
+            playerMenuUid != null -> playerMenuUid = null
+            showGuessDialog -> showGuessDialog = false
+            showExitDialog -> showExitDialog = false
+            else -> viewModel.leaveRoom(onRoomClosed)
+        }
+    }
     val giftScope = rememberCoroutineScope()
+    val emojiRemovalScope = rememberCoroutineScope()
+    val emojiFloatItems = remember { mutableStateListOf<EmojiFloatUi>() }
     var tick by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     val roomSnapshot = room
@@ -201,8 +246,32 @@ fun VoiceRoomScreen(
             socialFeedback = null
         }
     }
-    val secondsLeft = room?.timerEndAt?.let { end ->
-        ((end - tick) / 1000L).coerceAtLeast(0L)
+    val phaseTimerDisplay: PhaseTimerDisplay? = remember(room, tick) {
+        val r = room ?: return@remember null
+        val end = r.timerEndAt ?: return@remember null
+        val playing = r.status == "PLAYING"
+        val ph = r.phase
+        if (!playing || ph == GamePhase.GAME_OVER || ph == GamePhase.UNKNOWN) return@remember null
+        val raw = ((end - tick) / 1000L).coerceAtLeast(0L)
+        if (raw > 0L) return@remember PhaseTimerDisplay.Countdown(raw)
+        val grace = ((tick - end) / 1000L).coerceIn(0L, 300L).toInt()
+        PhaseTimerDisplay.ServerWait(grace)
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.roomEmojiEvents.collect { ev ->
+            val item = EmojiFloatUi(
+                key = ev.eventId,
+                emoji = ev.emoji,
+                hFraction = Random.nextFloat(),
+                senderUid = ev.fromUid,
+            )
+            emojiFloatItems.add(item)
+            emojiRemovalScope.launch {
+                delay(3200)
+                emojiFloatItems.remove(item)
+            }
+        }
     }
 
     val slots = remember(roomSnapshot, myUid, userProfiles) {
@@ -237,7 +306,8 @@ fun VoiceRoomScreen(
     val centerLabel = centerActionLabel(
         inRoom = inRoom,
         room = room,
-        canMantriGuess = canMantriGuess
+        canMantriGuess = canMantriGuess,
+        makeGuessLabel = stringResource(R.string.center_action_make_guess),
     )
     val centerEnabled =
         connectionState !is VoiceConnectionState.Connecting &&
@@ -251,10 +321,22 @@ fun VoiceRoomScreen(
     val requestAlreadySentText = stringResource(R.string.request_already_sent)
     val friendRequestFailedText = stringResource(R.string.friend_request_failed)
     val sendGiftFailedText = stringResource(R.string.send_gift_failed)
+    val context = LocalContext.current
+    val giftCelebration = rememberGiftCelebrationQueue()
+    var giftBannerUi by remember { mutableStateOf<GiftBannerUi?>(null) }
+
+    LaunchedEffect(viewModel) {
+        viewModel.giftBannerEvents.collect { banner ->
+            giftCelebration.enqueueIfFx(context, banner.giftId) {
+                giftBannerUi = banner
+            }
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(
                 Brush.verticalGradient(
                     listOf(RoyalCourtBgTop, RoyalCourtBgBottom)
@@ -279,7 +361,7 @@ fun VoiceRoomScreen(
                 GameStateBanner(
                     room = bannerRoom,
                     phase = phase,
-                    secondsLeft = secondsLeft,
+                    phaseTimer = phaseTimerDisplay,
                     voicePeers = participants.size
                 )
                 Spacer(modifier = Modifier.height(12.dp))
@@ -349,7 +431,38 @@ fun VoiceRoomScreen(
             Spacer(modifier = Modifier.height(100.dp))
         }
 
-        GiftBannerOverlay(viewModel = viewModel)
+        // Float above the seat cards without taking space in the scroll column (no layout jump).
+        if (emojiFloatItems.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp)
+                    .padding(bottom = 76.dp)
+                    .height(168.dp)
+                    .graphicsLayer { clip = false },
+            ) {
+                emojiFloatItems.forEach { item ->
+                    key(item.key) {
+                        val senderLabel = emojiSenderLabel(
+                            senderUid = item.senderUid,
+                            myUid = myUid,
+                            userProfiles = userProfiles,
+                        )
+                        FloatingRoomEmoji(
+                            emoji = item.emoji,
+                            horizontalFraction = item.hFraction,
+                            senderLabel = senderLabel,
+                        )
+                    }
+                }
+            }
+        }
+
+        GiftBannerOverlay(
+            banner = giftBannerUi,
+            onBannerCycleFinished = { giftBannerUi = null },
+        )
 
         socialFeedback?.takeIf { it.isNotBlank() }?.let { msg ->
             Surface(
@@ -463,6 +576,10 @@ fun VoiceRoomScreen(
                 giftError = null
                 showGiftPlayerPicker = true
             },
+            onEmojiClick = {
+                if (inRoom) showEmojiPicker = true
+            },
+            emojiContentDescription = stringResource(R.string.room_emoji_cd),
             onCenterClick = {
                 when {
                     canMantriGuess -> showGuessDialog = true
@@ -475,6 +592,16 @@ fun VoiceRoomScreen(
             centerEnabled = centerEnabled,
             centerLabel = centerLabel
         )
+
+        if (showEmojiPicker) {
+            RoomEmojiPickerDialog(
+                onDismiss = { showEmojiPicker = false },
+                onPick = { em ->
+                    viewModel.sendRoomEmoji(em)
+                    showEmojiPicker = false
+                },
+            )
+        }
 
         if (showGuessDialog && suspectOptions.isNotEmpty()) {
             MantriGuessDialog(
@@ -500,6 +627,8 @@ fun VoiceRoomScreen(
                 }
             )
         }
+
+        GiftCelebrationOverlayHost(queue = giftCelebration)
     }
 }
 
@@ -601,72 +730,162 @@ private fun GameEndScoresCard(
 private fun GameStateBanner(
     room: GameRoomSnapshot,
     phase: GamePhase,
-    secondsLeft: Long?,
+    phaseTimer: PhaseTimerDisplay?,
     voicePeers: Int
 ) {
+    val accent = gamePhaseAccentColor(phase)
+    val phaseTitle = gamePhaseTitleString(phase)
+    val phaseBody = gamePhaseBodyString(phase)
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Phase: ${phase.name}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(6.dp)
+                    .fillMaxHeight()
+                    .background(accent),
             )
-            Text(
-                text = "Room status: ${room.status}",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF64748B)
-            )
-            if (room.status == "ENDED" || phase == GamePhase.GAME_OVER) {
-                val reason = room.endReason?.trim().orEmpty()
-                val msg = room.message?.trim().orEmpty()
-                if (reason.isNotEmpty()) {
-                    Text(
-                        text = "End reason: $reason",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF0F172A),
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-                if (msg.isNotEmpty() && msg != reason) {
-                    Text(
-                        text = msg,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF64748B),
-                        modifier = Modifier.padding(top = if (reason.isNotEmpty()) 4.dp else 8.dp)
-                    )
-                }
-                if (reason.isEmpty() && msg.isEmpty()) {
-                    Text(
-                        text = "End reason: —",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF94A3B8),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-            }
-            if (secondsLeft != null) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    text = "Timer: ${secondsLeft}s",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF64748B),
-                    modifier = Modifier.padding(top = 4.dp)
+                    text = phaseTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A),
                 )
+                Text(
+                    text = phaseBody,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF475569),
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                Text(
+                    text = stringResource(R.string.game_room_status_line, room.status),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF94A3B8),
+                    modifier = Modifier.padding(top = 10.dp),
+                )
+                if (room.status == "ENDED" || phase == GamePhase.GAME_OVER) {
+                    val reason = room.endReason?.trim().orEmpty()
+                    val msg = room.message?.trim().orEmpty()
+                    if (reason.isNotEmpty()) {
+                        Text(
+                            text = "End reason: $reason",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF0F172A),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    if (msg.isNotEmpty() && msg != reason) {
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF64748B),
+                            modifier = Modifier.padding(top = if (reason.isNotEmpty()) 4.dp else 8.dp),
+                        )
+                    }
+                    if (reason.isEmpty() && msg.isEmpty()) {
+                        Text(
+                            text = "End reason: —",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF94A3B8),
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    when (val t = phaseTimer) {
+                        is PhaseTimerDisplay.Countdown -> {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = accent.copy(alpha = 0.12f),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.game_timer_remaining, t.seconds.toInt()),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = accent,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                        is PhaseTimerDisplay.ServerWait -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFFF7ED),
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.game_timer_server_wait, t.sinceExpirySec),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFC2410C),
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(R.string.game_timer_server_wait_hint),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF94A3B8),
+                                )
+                            }
+                        }
+                        null -> {}
+                    }
+                    Text(
+                        text = stringResource(R.string.game_voice_peers_line, voicePeers),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF94A3B8),
+                    )
+                }
             }
-            Text(
-                text = "Voice peers: $voicePeers",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color(0xFF94A3B8),
-                modifier = Modifier.padding(top = 6.dp)
-            )
         }
     }
 }
+
+private fun gamePhaseAccentColor(phase: GamePhase): Color = when (phase) {
+    GamePhase.RAJA_DECISION -> Color(0xFFD97706)
+    GamePhase.MANTRI_CONFIRM -> Color(0xFF2563EB)
+    GamePhase.VOICE_DISCUSSION -> Color(0xFF0D9488)
+    GamePhase.MANTRI_GUESS -> Color(0xFFDB2777)
+    GamePhase.GAME_OVER -> Color(0xFF64748B)
+    GamePhase.UNKNOWN -> Color(0xFF94A3B8)
+}
+
+@Composable
+private fun gamePhaseTitleString(phase: GamePhase): String = stringResource(
+    when (phase) {
+        GamePhase.RAJA_DECISION -> R.string.game_phase_raja_title
+        GamePhase.MANTRI_CONFIRM -> R.string.game_phase_mantri_confirm_title
+        GamePhase.VOICE_DISCUSSION -> R.string.game_phase_voice_discussion_title
+        GamePhase.MANTRI_GUESS -> R.string.game_phase_mantri_guess_title
+        GamePhase.GAME_OVER -> R.string.game_phase_game_over_title
+        GamePhase.UNKNOWN -> R.string.game_phase_unknown_title
+    },
+)
+
+@Composable
+private fun gamePhaseBodyString(phase: GamePhase): String = stringResource(
+    when (phase) {
+        GamePhase.RAJA_DECISION -> R.string.game_phase_raja_body
+        GamePhase.MANTRI_CONFIRM -> R.string.game_phase_mantri_confirm_body
+        GamePhase.VOICE_DISCUSSION -> R.string.game_phase_voice_discussion_body
+        GamePhase.MANTRI_GUESS -> R.string.game_phase_mantri_guess_body
+        GamePhase.GAME_OVER -> R.string.game_phase_game_over_body
+        GamePhase.UNKNOWN -> R.string.game_phase_unknown_body
+    },
+)
 
 @Composable
 private fun MantriGuessDialog(
@@ -732,13 +951,104 @@ private fun MantriGuessDialog(
     )
 }
 
+@Composable
+private fun emojiSenderLabel(
+    senderUid: String,
+    myUid: String?,
+    userProfiles: Map<String, VoiceUserProfile>,
+): String {
+    if (myUid != null && senderUid == myUid) {
+        return stringResource(R.string.you)
+    }
+    return userProfiles[senderUid]?.username?.takeIf { it.isNotBlank() }
+        ?: FirebaseUidMapping.shortLabel(senderUid)
+}
+
+@Composable
+private fun FloatingRoomEmoji(
+    emoji: String,
+    horizontalFraction: Float,
+    senderLabel: String,
+) {
+    val offsetY by animateFloatAsState(
+        targetValue = -120f,
+        animationSpec = tween(2600, easing = FastOutSlowInEasing),
+        label = "roomEmojiY",
+    )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(
+                    x = ((horizontalFraction - 0.5f) * 200).dp,
+                    y = offsetY.dp,
+                )
+                .widthIn(max = 140.dp),
+        ) {
+            Text(
+                text = emoji,
+                fontSize = 40.sp,
+            )
+            Text(
+                text = senderLabel,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF64748B),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoomEmojiPickerDialog(
+    onDismiss: () -> Unit,
+    onPick: (String) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.room_emoji_picker_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                RoomQuickReactionEmojis.chunked(4).forEach { row ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        row.forEach { em ->
+                            TextButton(onClick = { onPick(em) }) {
+                                Text(em, fontSize = 28.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+    )
+}
+
 private fun centerActionLabel(
     inRoom: Boolean,
     room: GameRoomSnapshot?,
-    canMantriGuess: Boolean
+    canMantriGuess: Boolean,
+    makeGuessLabel: String,
 ): String = when {
     !inRoom -> "JOIN VOICE"
-    canMantriGuess -> "MAKE GUESS"
+    canMantriGuess -> makeGuessLabel
     room?.status == "ENDED" -> "ENDED"
     else -> "IN VOICE"
 }
@@ -1056,6 +1366,8 @@ private fun VoiceActionBar(
     isMuted: Boolean,
     onMicClick: () -> Unit,
     onGiftClick: () -> Unit,
+    onEmojiClick: () -> Unit,
+    emojiContentDescription: String,
     onCenterClick: () -> Unit,
     centerEnabled: Boolean,
     centerLabel: String
@@ -1111,10 +1423,10 @@ private fun VoiceActionBar(
                         tint = if (inRoom) AccentPink else Color(0xFFCBD5E1)
                     )
                 }
-                IconButton(onClick = { }, enabled = inRoom) {
+                IconButton(onClick = onEmojiClick, enabled = inRoom) {
                     Icon(
                         Icons.Filled.Mood,
-                        contentDescription = "Emoji",
+                        contentDescription = emojiContentDescription,
                         tint = if (inRoom) Color(0xFF64748B) else Color(0xFFCBD5E1)
                     )
                 }

@@ -41,6 +41,8 @@ import kotlinx.coroutines.delay
 
 data class GiftBannerUi(
     val eventId: String,
+    /** Raw [GiftCatalog] id for Lottie / celebration. */
+    val giftId: String,
     val senderDisplay: String,
     val giftDisplayName: String,
     val recipientDisplay: String?,
@@ -56,12 +58,11 @@ typealias GiftWallItem = CommonGiftWallItem
 fun defaultGiftWallItems(): List<GiftWallItem> = commonDefaultGiftWallItems()
 
 @Composable
-fun GiftBannerOverlay(viewModel: VoiceRoomViewModel) {
-    var banner by remember { mutableStateOf<GiftBannerUi?>(null) }
+fun GiftBannerOverlay(
+    banner: GiftBannerUi?,
+    onBannerCycleFinished: () -> Unit,
+) {
     var revealed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        viewModel.giftBannerEvents.collect { banner = it }
-    }
     LaunchedEffect(banner?.eventId) {
         val id = banner?.eventId ?: return@LaunchedEffect
         revealed = false
@@ -69,7 +70,7 @@ fun GiftBannerOverlay(viewModel: VoiceRoomViewModel) {
         // Reveal banner, then hide after delay.
         if (banner?.eventId == id) revealed = true
         delay(2200)
-        if (banner?.eventId == id) banner = null
+        if (banner?.eventId == id) onBannerCycleFinished()
     }
     Box(
         modifier = Modifier

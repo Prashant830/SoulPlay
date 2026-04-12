@@ -1,6 +1,8 @@
 package com.souljoy.soulmasti.ui
 
-import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -20,6 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
@@ -40,6 +44,7 @@ import com.souljoy.soulmasti.ui.auth.CreateProfileScreen
 import com.souljoy.soulmasti.ui.auth.LoginScreen
 import com.souljoy.soulmasti.ui.navigation.SoulplayDestinations
 import com.souljoy.soulmasti.ui.settings.SettingsScreen
+import com.souljoy.soulmasti.ui.shop.GoldShopScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomNeedMatchScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
@@ -82,13 +87,9 @@ fun SoulplayApp(
             route.startsWith("chat_thread") ||
             route.contains("login") ||
             route.contains("create_profile") ||
-            route.contains("auth_gate")
+            route.contains("auth_gate") ||
+            route.contains(SoulplayDestinations.GoldShop)
     val showBottomBar = !hideBottomBar
-
-    // Completely consume system back inside Compose so it doesn't pop the nav stack.
-    BackHandler(enabled = true) {
-        // No-op: back does nothing anywhere in the app.
-    }
 
     Scaffold(
         modifier = modifier,
@@ -133,10 +134,20 @@ fun SoulplayApp(
             }
         }
     ) { innerPadding ->
+        // Avoid applying the scaffold’s top safe-area padding here: screens with a Material
+        // [TopAppBar] already consume status-bar insets; padding NavHost at the top as well doubled the gap on cutout devices.
+        val layoutDirection = LocalLayoutDirection.current
         NavHost(
             navController = navController,
             startDestination = SoulplayDestinations.AuthGate,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(
+                PaddingValues(
+                    start = innerPadding.calculateStartPadding(layoutDirection),
+                    top = 0.dp,
+                    end = innerPadding.calculateEndPadding(layoutDirection),
+                    bottom = innerPadding.calculateBottomPadding()
+                )
+            )
         ) {
             composable(SoulplayDestinations.AuthGate) {
                 AuthGateScreen(
@@ -165,7 +176,14 @@ fun SoulplayApp(
                         navController.navigate(SoulplayDestinations.AuthGate) {
                             popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
                         }
-                    }
+                    },
+                    onBack = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(SoulplayDestinations.AuthGate) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                 )
             }
 
@@ -175,7 +193,14 @@ fun SoulplayApp(
                         navController.navigate(SoulplayDestinations.Home) {
                             popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
                         }
-                    }
+                    },
+                    onBack = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(SoulplayDestinations.AuthGate) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                 )
             }
 
@@ -220,7 +245,15 @@ fun SoulplayApp(
                             restoreState = true
                         }
                     },
+                    onOpenGoldShop = {
+                        navController.navigate(SoulplayDestinations.GoldShop)
+                    },
                     onDismissError = { homeVm.dismissError() }
+                )
+            }
+            composable(SoulplayDestinations.GoldShop) {
+                GoldShopScreen(
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(SoulplayDestinations.VoiceRoom) {
@@ -263,12 +296,11 @@ fun SoulplayApp(
                         hasVoicePermission = hasVoicePermission,
                         requestVoicePermission = requestVoicePermission,
                         onRoomClosed = {
-                            navController.navigate(SoulplayDestinations.Home) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                            // Pop the active game off the stack so Back does not return to an ended room.
+                            if (!navController.popBackStack()) {
+                                navController.navigate(SoulplayDestinations.Home) {
+                                    launchSingleTop = true
                                 }
-                                launchSingleTop = true
-                                restoreState = true
                             }
                         }
                     )

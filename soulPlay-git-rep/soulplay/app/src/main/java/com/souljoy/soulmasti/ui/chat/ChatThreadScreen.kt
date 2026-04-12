@@ -2,22 +2,20 @@ package com.souljoy.soulmasti.ui.chat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,7 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,11 +34,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.souljoy.soulmasti.R
+import com.souljoy.soulmasti.ui.common.SoulplayChatThreadTopBar
+import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
+import com.souljoy.soulmasti.ui.common.gift.rememberGiftCelebrationQueue
 import com.souljoy.soulmasti.ui.voiceroom.GiftWallDialog
 import com.souljoy.soulmasti.ui.voiceroom.defaultGiftWallItems
 import kotlinx.coroutines.launch
@@ -71,6 +71,45 @@ fun ChatThreadScreen(
     var giftSending by remember { mutableStateOf(false) }
     var giftError by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = LocalContext.current
+    val giftCelebration = rememberGiftCelebrationQueue()
+    /** Only messages created at/after this instant (minus skew) can play incoming gift FX (avoids replaying history). */
+    val threadOpenedAtMs = remember { System.currentTimeMillis() }
+    var giftFxBaselineReady by remember { mutableStateOf(false) }
+    var giftFxKnownIds by remember { mutableStateOf(emptySet<String>()) }
+
+    LaunchedEffect(messages, myUid) {
+        val uid = myUid ?: return@LaunchedEffect
+        if (!giftFxBaselineReady) {
+            if (messages.isEmpty()) return@LaunchedEffect
+            if (messages.size == 1) {
+                val m = messages.first()
+                giftFxKnownIds = setOf(m.id)
+                giftFxBaselineReady = true
+                if (m.fromUid != uid) {
+                    val payload = parseGiftChatPayload(m.text)
+                    if (payload != null) {
+                        val looksLive =
+                            m.createdAt != null && m.createdAt >= threadOpenedAtMs - 5_000L
+                        if (looksLive) giftCelebration.enqueueIfFx(context, payload.giftId)
+                    }
+                }
+                return@LaunchedEffect
+            }
+            giftFxKnownIds = messages.map { it.id }.toSet()
+            giftFxBaselineReady = true
+            return@LaunchedEffect
+        }
+        val prev = giftFxKnownIds
+        val currentIds = messages.map { it.id }.toSet()
+        val newMessages = messages.filter { it.id !in prev }
+        giftFxKnownIds = currentIds
+        for (msg in newMessages) {
+            if (msg.fromUid == uid) continue
+            val payload = parseGiftChatPayload(msg.text) ?: continue
+            giftCelebration.enqueueIfFx(context, payload.giftId)
+        }
+    }
 
     LaunchedEffect(messages.size) {
         val lastIndex = messages.lastIndex
@@ -79,30 +118,14 @@ fun ChatThreadScreen(
         }
     }
 
+    Box(modifier = modifier.fillMaxSize()) {
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         topBar = {
-            TopAppBar(
-                modifier = Modifier.statusBarsPadding(),
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        ChatProfileAvatar(
-                            photoUrl = peerPhotoUrl,
-                            contentDescription = peerName,
-                            size = 36.dp
-                        )
-                        Text(peerName, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_back))
-                    }
-                }
+            SoulplayChatThreadTopBar(
+                peerName = peerName,
+                peerPhotoUrl = peerPhotoUrl,
+                onBack = onBack,
             )
         }
     ) { padding ->
@@ -211,6 +234,9 @@ fun ChatThreadScreen(
         }
     }
 
+        GiftCelebrationOverlayHost(queue = giftCelebration)
+    }
+
     GiftWallDialog(
         visible = showGiftDialog,
         recipientDisplayName = peerName,
@@ -229,33 +255,13 @@ fun ChatThreadScreen(
                 giftSending = false
                 result.onSuccess {
                     showGiftDialog = false
+                    giftCelebration.enqueueIfFx(context, giftId)
                 }
                 result.onFailure { e ->
                     giftError = e.message ?: sendGiftErrorText
                 }
             }
         }
-    )
-}
-
-private data class GiftChatPayload(
-    val giftId: String,
-    val giftLabel: String,
-    val giftCoins: Long,
-    val receiverCoins: Long,
-)
-
-private fun parseGiftChatPayload(text: String): GiftChatPayload? {
-    if (!text.startsWith("GIFT|")) return null
-    val p = text.split("|")
-    if (p.size < 5) return null
-    val giftCoins = p[3].toLongOrNull() ?: 0L
-    val receiverCoins = p[4].toLongOrNull() ?: 0L
-    return GiftChatPayload(
-        giftId = p[1],
-        giftLabel = p[2],
-        giftCoins = giftCoins,
-        receiverCoins = receiverCoins,
     )
 }
 

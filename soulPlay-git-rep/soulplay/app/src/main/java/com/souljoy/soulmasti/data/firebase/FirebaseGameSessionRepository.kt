@@ -1,15 +1,18 @@
 package com.souljoy.soulmasti.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.MutableData
+import com.google.firebase.database.ServerValue
 import com.google.firebase.database.Transaction
 import com.google.firebase.database.ValueEventListener
 import com.souljoy.soulmasti.domain.model.GameHistoryEntry
 import com.souljoy.soulmasti.domain.model.GamePhase
 import com.souljoy.soulmasti.domain.model.GameRoomSnapshot
+import com.souljoy.soulmasti.domain.model.RoomEmojiEvent
 import com.souljoy.soulmasti.domain.model.MatchOutcome
 import com.souljoy.soulmasti.domain.RoomJoinEconomy
 import com.souljoy.soulmasti.domain.model.PlayerInRoom
@@ -122,6 +125,56 @@ class FirebaseGameSessionRepository(
             .await()
     }
 
+    override suspend fun sendRoomEmoji(roomId: String, emoji: String) {
+        val uid = requireUid()
+        val trimmed = emoji.trim().take(32)
+        if (trimmed.isEmpty()) return
+        database.reference
+            .child("rooms")
+            .child(roomId)
+            .child("emojiEvents")
+            .push()
+            .setValue(
+                mapOf(
+                    "fromUid" to uid,
+                    "emoji" to trimmed,
+                    "sentAt" to ServerValue.TIMESTAMP,
+                ),
+            )
+            .await()
+    }
+
+    override fun observeRoomEmojiEvents(roomId: String): Flow<RoomEmojiEvent> = callbackFlow {
+        val ref = database.reference.child("rooms").child(roomId).child("emojiEvents")
+        val listener = object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val fromUid = snapshot.child("fromUid").getValue(String::class.java) ?: return
+                val em = snapshot.child("emoji").getValue(String::class.java) ?: return
+                val sentAt = parseLong(snapshot.child("sentAt").value) ?: System.currentTimeMillis()
+                trySend(
+                    RoomEmojiEvent(
+                        eventId = snapshot.key.orEmpty(),
+                        fromUid = fromUid,
+                        emoji = em,
+                        sentAt = sentAt,
+                    ),
+                )
+            }
+
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+
+            override fun onCancelled(error: DatabaseError) {
+                close(error.toException())
+            }
+        }
+        ref.addChildEventListener(listener)
+        awaitClose { ref.removeEventListener(listener) }
+    }
+
     override suspend fun setLocalPlayerOnline(online: Boolean) {
         val uid = effectiveUid() ?: return
         runCatching {
@@ -133,6 +186,33 @@ class FirebaseGameSessionRepository(
         val uid = requireUid()
         val snap = database.reference.child("users").child(uid).child("totalWinnings").get().await()
         return parseLong(snap.value) ?: 0L
+    }
+
+    override suspend fun addPurchasedCoins(amount: Long) {
+        if (amount <= 0L) return
+        val uid = requireUid()
+        val ref = database.reference.child("users").child(uid).child("totalWinnings")
+        suspendCancellableCoroutine { cont ->
+            ref.runTransaction(object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    val v = parseLong(currentData.value) ?: 0L
+                    currentData.value = v + amount
+                    return Transaction.success(currentData)
+                }
+
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    currentData: DataSnapshot?,
+                ) {
+                    when {
+                        error != null -> cont.resumeWithException(error.toException())
+                        !committed -> cont.resumeWithException(IllegalStateException("Could not credit coins."))
+                        else -> cont.resume(Unit)
+                    }
+                }
+            })
+        }
     }
 
     override suspend fun deductJoinRoomFee(): Long {

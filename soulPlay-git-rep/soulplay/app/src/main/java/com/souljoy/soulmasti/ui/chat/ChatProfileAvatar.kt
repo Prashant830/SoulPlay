@@ -36,10 +36,12 @@ fun ChatProfileAvatar(
             AsyncImage(
                 model = photoUrl,
                 contentDescription = contentDescription,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape),
                 contentScale = ContentScale.Crop,
                 placeholder = placeholder,
-                error = placeholder
+                error = placeholder,
             )
         } else {
             Image(

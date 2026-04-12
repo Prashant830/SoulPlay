@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,11 +67,18 @@ fun HomeScreen(
     onCancelSearch: () -> Unit,
     onOpenVoiceTab: () -> Unit,
     onOpenNotifications: () -> Unit = {},
+    onOpenGoldShop: () -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showStartDialog by remember { mutableStateOf(false) }
     val isIdle = matchState is HomeMatchUiState.Idle
+
+    DisposableEffect(Unit) {
+        onDispose {
+            onCancelSearch()
+        }
+    }
 
     // Close the dialog when we successfully match (navigation will happen immediately).
     LaunchedEffect(matchState) {
@@ -79,6 +88,7 @@ fun HomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(MaterialTheme.colorScheme.surface)
     ) {
         val scrollState = rememberScrollState()
@@ -132,16 +142,26 @@ fun HomeScreen(
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(999.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                            .clickable(onClick = onOpenGoldShop)
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
                     ) {
-
                         Text(
-                            text = if (coinBalance == null) "\uD83E\uDE99 …" else "\uD83E\uDE99 $coinBalance",
+                            text = "\uD83E\uDE99",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (coinBalance == null) "…" else "$coinBalance",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "+",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFFFF6D00),
                         )
                     }
                 }
@@ -359,7 +379,14 @@ private fun StartMatchDialog(
     onDismissError: () -> Unit,
 ) {
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            when (matchState) {
+                HomeMatchUiState.Searching -> onCancelSearch()
+                is HomeMatchUiState.Error -> onDismissError()
+                else -> Unit
+            }
+            onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Box(

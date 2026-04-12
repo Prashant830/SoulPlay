@@ -123,4 +123,5 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.agora.rtc:voice-rtc-basic:4.6.3")
     implementation("com.android.billingclient:billing:7.0.0")
+    implementation("com.airbnb.android:lottie-compose:6.6.2")
 }

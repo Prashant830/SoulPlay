@@ -13,7 +13,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 sealed class HomeMatchUiState {
     data object Idle : HomeMatchUiState()
@@ -135,5 +138,18 @@ class HomeViewModel(
         if (_uiState.value is HomeMatchUiState.Error) {
             _uiState.value = HomeMatchUiState.Idle
         }
+    }
+
+    override fun onCleared() {
+        matchJob?.cancel()
+        try {
+            runBlocking(Dispatchers.IO) {
+                withTimeoutOrNull(2500L) {
+                    runCatching { game.removeFromWaitingQueue() }
+                }
+            }
+        } catch (_: Exception) {
+        }
+        super.onCleared()
     }
 }

@@ -1,6 +1,7 @@
 package com.souljoy.soulmasti.ui.auth
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,9 +47,11 @@ import com.souljoy.soulmasti.R
 @Composable
 fun LoginScreen(
     onRegistered: () -> Unit,
+    onBack: () -> Unit = {},
     modifier: Modifier = Modifier,
     vm: LoginViewModel = koinViewModel(),
 ) {
+    BackHandler(onBack = onBack)
     val state by vm.uiState.collectAsState()
     val context = LocalContext.current
 
@@ -106,6 +110,7 @@ fun LoginScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .statusBarsPadding()
             .background(Color.White)
             .padding(horizontal = 24.dp),
     ) {
