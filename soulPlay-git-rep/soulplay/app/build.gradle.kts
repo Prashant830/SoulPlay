@@ -79,9 +79,8 @@ android {
     }
 }
 
-// Versioned output names (AGP 9 new DSL has no stable applicationVariants.outputs API here):
-//   APK: build/outputs/apk/<debug|release>/SoulMasti-<type>-v<versionName>-<versionCode>.apk
-//   AAB: build/outputs/bundle/release/SoulMasti-release-v<versionName>-<versionCode>.aab
+// Versioned copies (AGP 9): keeps default app-{debug|release}.apk / app-release.aab so IDE deploy & scripts work.
+// Also writes SoulMasti-*-v<versionName>-<versionCode>.{apk,aab} alongside.
 afterEvaluate {
     fun versionPair(): Pair<String, Int> {
         val app = extensions.getByType(ApplicationExtension::class.java)
@@ -90,26 +89,23 @@ afterEvaluate {
         return vn to vc
     }
 
-    fun renameApkIn(dir: File, buildType: String) {
+    fun copyVersionedApk(dir: File, buildType: String) {
         if (!dir.isDirectory) return
         val (vn, vc) = versionPair()
-        val destName = "SoulMasti-${buildType}-v${vn}-${vc}.apk"
-        val dest = File(dir, destName)
+        val versionedName = "SoulMasti-${buildType}-v${vn}-${vc}.apk"
+        val versioned = File(dir, versionedName)
         val src = dir.listFiles()
             ?.filter { it.isFile && it.extension == "apk" && it.name.startsWith("app-") }
             ?.maxByOrNull { it.lastModified() }
             ?: return
-        if (src.name == destName) return
-        if (dest.exists()) dest.delete()
-        if (!src.renameTo(dest)) {
-            src.copyTo(dest, overwrite = true)
-            src.delete()
-        }
+        if (src.name == versionedName) return
+        src.copyTo(versioned, overwrite = true)
+        // Do not remove/rename app-{buildType}.apk — Android Studio install & many tools expect it.
     }
 
     listOf("debug" to "assembleDebug", "release" to "assembleRelease").forEach { (type, taskName) ->
         tasks.findByName(taskName)?.doLast {
-            renameApkIn(
+            copyVersionedApk(
                 layout.buildDirectory.dir("outputs/apk/$type").get().asFile,
                 type,
             )
@@ -119,14 +115,13 @@ afterEvaluate {
     tasks.findByName("bundleRelease")?.doLast {
         val (vn, vc) = versionPair()
         val dir = layout.buildDirectory.dir("outputs/bundle/release").get().asFile
-        val src = dir.listFiles()?.firstOrNull { it.isFile && it.extension == "aab" } ?: return@doLast
+        val src = dir.listFiles()
+            ?.firstOrNull { it.isFile && it.extension == "aab" && it.name.startsWith("app-") }
+            ?: return@doLast
         val dest = File(dir, "SoulMasti-release-v${vn}-${vc}.aab")
         if (src.absolutePath == dest.absolutePath) return@doLast
-        if (dest.exists()) dest.delete()
-        if (!src.renameTo(dest)) {
-            src.copyTo(dest, overwrite = true)
-            src.delete()
-        }
+        src.copyTo(dest, overwrite = true)
+        // Keep app-release.aab for tooling that looks for the default name.
     }
 }
 

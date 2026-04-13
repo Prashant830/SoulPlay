@@ -54,6 +54,8 @@ class SettingsViewModel(
 
     private val _historyUsernames = MutableStateFlow<Map<String, String>>(emptyMap())
     val historyUsernames: StateFlow<Map<String, String>> = _historyUsernames
+    private val _userProfilePhotos = MutableStateFlow<Map<String, String>>(emptyMap())
+    val userProfilePhotos: StateFlow<Map<String, String>> = _userProfilePhotos
 
     private val _giftReceivedCoins = MutableStateFlow<Long?>(null)
     val giftReceivedCoins: StateFlow<Long?> = _giftReceivedCoins
@@ -84,6 +86,9 @@ class SettingsViewModel(
         val snap = database.reference.child("users").child(uid).get().await()
         _username.value = snap.child("username").getValue(String::class.java)
         _profilePictureUrl.value = snap.child("profilePictureUrl").getValue(String::class.java)
+        _profilePictureUrl.value?.takeIf { it.isNotBlank() }?.let { url ->
+            _userProfilePhotos.value = _userProfilePhotos.value + (uid to url)
+        }
         _gender.value = snap.child("gender").getValue(String::class.java)
         _giftReceivedCoins.value = snap.child("giftReceivedCoins").getValue(Long::class.java)
         _giftReceivedCount.value = snap.child("giftReceivedCount").getValue(Long::class.java)
@@ -94,6 +99,7 @@ class SettingsViewModel(
         val snap = database.reference.child("users").child(uid).child("giftsReceived").get().await()
         val list = mutableListOf<ReceivedGiftSummary>()
         val senderNames = mutableMapOf<String, String>()
+        val senderPhotos = _userProfilePhotos.value.toMutableMap()
         for (child in snap.children) {
             val coins = child.child("coins").getValue(Long::class.java) ?: continue
             val createdAt = child.child("createdAt").getValue(Long::class.java) ?: 0L
@@ -101,13 +107,19 @@ class SettingsViewModel(
             val giftId = child.child("giftId").getValue(String::class.java)
             val fromName = fromUserId?.let { uidSender ->
                 senderNames[uidSender] ?: run {
-                    val name = runCatching {
-                        database.reference.child("users").child(uidSender).child("username").get().await()
-                            .getValue(String::class.java)
-                            ?.trim()
-                            ?.takeIf { it.isNotBlank() }
+                    val userSnap = runCatching {
+                        database.reference.child("users").child(uidSender).get().await()
                     }.getOrNull()
+                    val name = userSnap?.child("username")
+                        ?.getValue(String::class.java)
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                    val photo = userSnap?.child("profilePictureUrl")
+                        ?.getValue(String::class.java)
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
                     if (name != null) senderNames[uidSender] = name
+                    if (photo != null) senderPhotos[uidSender] = photo
                     name
                 }
             }
@@ -123,6 +135,7 @@ class SettingsViewModel(
         }
         list.sortByDescending { it.createdAt }
         _receivedGiftHistory.value = list
+        _userProfilePhotos.value = senderPhotos
     }
 
     private suspend fun preloadHistoryUsernames(entries: List<GameHistoryEntry>) {
@@ -142,17 +155,27 @@ class SettingsViewModel(
         if (missing.isEmpty()) return
 
         val fetched = mutableMapOf<String, String>()
+        val fetchedPhotos = mutableMapOf<String, String>()
         for (uid in missing) {
-            val name = runCatching {
-                database.reference.child("users").child(uid).child("username").get().await()
-                    .getValue(String::class.java)
-                    ?.trim()
-                    ?.takeIf { it.isNotBlank() }
+            val userSnap = runCatching {
+                database.reference.child("users").child(uid).get().await()
             }.getOrNull()
+            val name = userSnap?.child("username")
+                ?.getValue(String::class.java)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            val photo = userSnap?.child("profilePictureUrl")
+                ?.getValue(String::class.java)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
             if (name != null) fetched[uid] = name
+            if (photo != null) fetchedPhotos[uid] = photo
         }
         if (fetched.isNotEmpty()) {
             _historyUsernames.value = known + fetched
+        }
+        if (fetchedPhotos.isNotEmpty()) {
+            _userProfilePhotos.value = _userProfilePhotos.value + fetchedPhotos
         }
     }
 

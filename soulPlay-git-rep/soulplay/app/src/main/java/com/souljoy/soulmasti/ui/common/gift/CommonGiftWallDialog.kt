@@ -28,7 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -86,6 +89,7 @@ fun GiftWallDialog(
     val configuration = LocalConfiguration.current
     val sheetMaxHeight = (configuration.screenHeightDp * 0.88f).dp
     val scrollAreaMaxHeight = (configuration.screenHeightDp * 0.52f).dp.coerceAtLeast(220.dp)
+    var selectedGiftId by remember(visible, items) { mutableStateOf(items.firstOrNull()?.id) }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -167,8 +171,9 @@ fun GiftWallDialog(
                                         val enabled = !sending
                                         GiftWallCard(
                                             item = item,
+                                            selected = item.id == selectedGiftId,
                                             enabled = enabled,
-                                            onClick = { onSend(item.id) },
+                                            onClick = { selectedGiftId = item.id },
                                         )
                                     }
                                 }
@@ -191,18 +196,37 @@ fun GiftWallDialog(
                                 strokeWidth = 3.dp,
                             )
                         } else {
-                            Button(
-                                onClick = onDismiss,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
-                                contentPadding = ButtonDefaults.ContentPadding,
-                                modifier = Modifier.defaultMinSize(minWidth = 120.dp, minHeight = 48.dp),
-                            ) {
-                                Text(
-                                    text = "Close",
-                                    color = Color(0xFF334155),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = onDismiss,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE2E8F0)),
+                                    contentPadding = ButtonDefaults.ContentPadding,
+                                    modifier = Modifier.defaultMinSize(minWidth = 104.dp, minHeight = 48.dp),
+                                ) {
+                                    Text(
+                                        text = "Close",
+                                        color = Color(0xFF334155),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                                Button(
+                                    onClick = {
+                                        selectedGiftId?.let(onSend)
+                                    },
+                                    enabled = selectedGiftId != null,
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEC4899)),
+                                    contentPadding = ButtonDefaults.ContentPadding,
+                                    modifier = Modifier.defaultMinSize(minWidth = 136.dp, minHeight = 48.dp),
+                                ) {
+                                    val selected = items.firstOrNull { it.id == selectedGiftId }
+                                    Text(
+                                        text = if (selected == null) "Send gift" else "Send ${selected.label}",
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                     }
@@ -215,14 +239,15 @@ fun GiftWallDialog(
 @Composable
 private fun GiftWallCard(
     item: GiftWallItem,
+    selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
-        color = Color.White,
+        color = if (selected) Color(0xFFFCE7F3) else Color.White,
         tonalElevation = 1.dp,
-        shadowElevation = 2.dp,
+        shadowElevation = if (selected) 4.dp else 2.dp,
         modifier = Modifier
             .fillMaxWidth()
             .clickable(enabled = enabled) { onClick() }
@@ -236,13 +261,13 @@ private fun GiftWallCard(
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 textAlign = TextAlign.Center,
-                color = Color(0xFF0F172A)
+                color = if (selected) Color(0xFF9D174D) else Color(0xFF0F172A)
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "${item.priceCoins} 🪙",
                 style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF64748B)
+                color = if (selected) Color(0xFF9D174D) else Color(0xFF64748B)
             )
         }
     }

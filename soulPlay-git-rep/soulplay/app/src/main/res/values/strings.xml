@@ -78,4 +78,70 @@
     <string name="room_emoji_cd">Send emoji reaction</string>
     <string name="game_voice_peers_line">Voice: %1$d connected</string>
     <string name="center_action_make_guess">GUESS CHOR</string>
+
+    <!-- Settings / Profile -->
+    <string name="settings_stats">Stats</string>
+    <string name="settings_rounds_count">%1$d rounds</string>
+    <string name="settings_help_center">Help Center</string>
+    <string name="settings_privacy_policy">Privacy Policy</string>
+    <string name="settings_terms_conditions">Terms &amp; Conditions</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_region">Region</string>
+    <string name="settings_signature">Signature</string>
+    <string name="settings_security_center">Security Center</string>
+    <string name="settings_invite_friends">Invite Friends</string>
+    <string name="settings_logout">Logout</string>
+    <string name="settings_help_center_toast">Write a mail to: ps962630@gmail.com</string>
+    <string name="settings_security_center_toast">Security concern? Drop a mail with proof at ps962630@gmail.com</string>
+    <string name="settings_invite_coming_soon">Feature coming soon</string>
+    <string name="settings_privacy_policy_body">We only collect app data required to provide gameplay, profiles, chat, gifting and safety moderation. Your profile details, game history and gift activity are stored securely. For deletion/support contact: ps962630@gmail.com</string>
+    <string name="settings_terms_body">Use the app respectfully. Do not abuse chat, impersonate users, or exploit gifting/game systems. Violations may lead to suspension. Purchases and gifts are final unless required by law. For support contact: ps962630@gmail.com</string>
+    <string name="settings_logout_confirm_title">Logout</string>
+    <string name="settings_logout_confirm_message">Do you want to logout?</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    <string name="profile_default_name">Player</string>
+
+    <!-- Edit profile -->
+    <string name="edit_profile_title">Edit Profile</string>
+    <string name="edit_profile_avatar">Avatar</string>
+    <string name="edit_profile_nickname">Nickname</string>
+    <string name="edit_profile_set_nickname">Set nickname</string>
+    <string name="edit_profile_user_id">User ID</string>
+    <string name="edit_profile_gender">Gender</string>
+    <string name="edit_profile_not_set">Not set</string>
+    <string name="edit_profile_region">Region</string>
+    <string name="edit_profile_signature">Signature</string>
+    <string name="edit_nickname_title">Edit nickname</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+
+    <!-- Gift wall / history -->
+    <string name="gift_title_plain">Gift</string>
+    <string name="gift_history">History</string>
+    <string name="gift_wall_tab">Gift Wall</string>
+    <string name="gift_badge_tab">Gift Badge</string>
+    <string name="received_tab">Received</string>
+    <string name="gift_summary_count">%1$d Gift</string>
+    <string name="star_summary_count">%1$d Star</string>
+    <string name="gift_total_count">x%1$d</string>
+    <string name="gift_with_most">With the most gifts</string>
+    <string name="gift_price">Price</string>
+    <string name="gift_amount_sends">Amount (sends)</string>
+    <string name="gift_max_user_sent">Max user sent</string>
+    <string name="gift_received_coins">Received Coins</string>
+    <string name="gift_history_title">Gift History</string>
+
+    <!-- Statistics -->
+    <string name="my_statistics">My Statistics</string>
+    <string name="total_rounds">Total Rounds</string>
+    <string name="recent_statistics">Recent Statistics</string>
+    <string name="stats_header_hint">You are the soul players, Your game history showing is here!</string>
+    <string name="stats_row_win">Win</string>
+    <string name="stats_row_loss">Loss</string>
+    <string name="stats_details">Details</string>
+    <string name="stats_less_details">Less details</string>
+    <string name="stats_role">Role: %1$s</string>
+    <string name="stats_result">Result: %1$s</string>
+    <string name="stats_points">Points: %1$s</string>
 </resources>
