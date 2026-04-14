@@ -51,6 +51,8 @@ class SettingsViewModel(
 
     private val _gender = MutableStateFlow<String?>(null)
     val gender: StateFlow<String?> = _gender
+    private val _signature = MutableStateFlow<String?>(null)
+    val signature: StateFlow<String?> = _signature
 
     private val _historyUsernames = MutableStateFlow<Map<String, String>>(emptyMap())
     val historyUsernames: StateFlow<Map<String, String>> = _historyUsernames
@@ -90,6 +92,16 @@ class SettingsViewModel(
             _userProfilePhotos.value = _userProfilePhotos.value + (uid to url)
         }
         _gender.value = snap.child("gender").getValue(String::class.java)
+        _signature.value =
+            snap.child("signature").getValue(String::class.java)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: snap.child("bio").getValue(String::class.java)
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                ?: snap.child("status").getValue(String::class.java)
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
         _giftReceivedCoins.value = snap.child("giftReceivedCoins").getValue(Long::class.java)
         _giftReceivedCount.value = snap.child("giftReceivedCount").getValue(Long::class.java)
     }
@@ -185,6 +197,13 @@ class SettingsViewModel(
         if (trimmed.isBlank()) return
         database.reference.child("users").child(uid).child("username").setValue(trimmed).await()
         _username.value = trimmed
+    }
+
+    suspend fun updateSignature(newSignature: String) {
+        val uid = game.firebaseUid.value ?: return
+        val trimmed = newSignature.trim()
+        database.reference.child("users").child(uid).child("signature").setValue(trimmed).await()
+        _signature.value = trimmed
     }
 
     /**

@@ -62,9 +62,12 @@ import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Leaderboard
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.Policy
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Shop
 import androidx.compose.material.icons.outlined.Signpost
@@ -72,6 +75,7 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,6 +92,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.google.firebase.auth.FirebaseAuth
 import coil.compose.AsyncImage
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -96,23 +102,31 @@ import com.airbnb.lottie.compose.rememberLottieComposition
 import com.souljoy.soulmasti.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.gift.GiftCatalog
 import com.souljoy.soulmasti.domain.gift.GiftFxResources
 import com.souljoy.soulmasti.domain.model.GameHistoryEntry
 import com.souljoy.soulmasti.domain.model.MatchOutcome
+import com.souljoy.soulmasti.domain.repository.SocialRepository
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+
+// 0xFFFFF8F8 profile colour
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = koinViewModel(),
     onLogout: () -> Unit = {},
+    onOpenUserProfile: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val socialRepository: SocialRepository = koinInject()
+    val friends by socialRepository.friends.collectAsStateWithLifecycle()
     val totalWinnings by viewModel.totalWinnings.collectAsStateWithLifecycle()
     val giftReceivedCoins by viewModel.giftReceivedCoins.collectAsStateWithLifecycle()
     val giftReceivedCount by viewModel.giftReceivedCount.collectAsStateWithLifecycle()
@@ -121,6 +135,7 @@ fun SettingsScreen(
     val currentUsername by viewModel.username.collectAsStateWithLifecycle()
     val profilePictureUrl by viewModel.profilePictureUrl.collectAsStateWithLifecycle()
     val gender by viewModel.gender.collectAsStateWithLifecycle()
+    val signature by viewModel.signature.collectAsStateWithLifecycle()
     val historyUsernames by viewModel.historyUsernames.collectAsStateWithLifecycle()
     val userProfilePhotos by viewModel.userProfilePhotos.collectAsStateWithLifecycle()
     val helpCenterToastText = stringResource(R.string.settings_help_center_toast)
@@ -128,15 +143,16 @@ fun SettingsScreen(
     val inviteComingSoonToastText = stringResource(R.string.settings_invite_coming_soon)
 
     var usernameDraft by remember { mutableStateOf(currentUsername.orEmpty()) }
+    var signatureDraft by remember { mutableStateOf(signature.orEmpty()) }
     var photoError by remember { mutableStateOf<String?>(null) }
     var uploadingPhoto by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     var showGiftHistoryDialog by remember { mutableStateOf(false) }
     var showGiftHistoryListDialog by remember { mutableStateOf(false) }
     var showEditProfileDialog by remember { mutableStateOf(false) }
-    var showProfilePreviewDialog by remember { mutableStateOf(false) }
     var showStatsDialog by remember { mutableStateOf(false) }
     var showNicknameEditor by remember { mutableStateOf(false) }
+    var showSignatureEditor by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
@@ -162,16 +178,11 @@ fun SettingsScreen(
     LaunchedEffect(currentUsername) {
         usernameDraft = currentUsername.orEmpty()
     }
+    LaunchedEffect(signature) {
+        signatureDraft = signature.orEmpty()
+    }
 
-    if (showProfilePreviewDialog) {
-        ProfilePreviewFullPage(
-            profilePictureUrl = profilePictureUrl,
-            currentUsername = currentUsername,
-            onBack = { showProfilePreviewDialog = false },
-            onOpenGiftWall = { showGiftHistoryDialog = true },
-            onOpenStats = { showStatsDialog = true }
-        )
-    } else LazyColumn(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
@@ -182,7 +193,9 @@ fun SettingsScreen(
             ProfileHeroSection(
                 displayName = currentUsername.orEmpty().ifBlank { stringResource(R.string.profile_default_name) },
                 imageUrl = profilePictureUrl,
-                onAvatarClick = { showProfilePreviewDialog = true },
+                onAvatarClick = {
+                    FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }?.let(onOpenUserProfile)
+                },
                 onHeaderClick = { showEditProfileDialog = true }
             )
         }
@@ -234,7 +247,11 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = Color.White),
                 shape = RoundedCornerShape(0.dp)
             ) {
-                SettingsNavRow(stringResource(R.string.settings_signature), "", leftIcon = Icons.Outlined.Signpost) { }
+                SettingsNavRow(
+                    stringResource(R.string.settings_signature),
+                    signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
+                    leftIcon = Icons.Outlined.Signpost
+                ) { showSignatureEditor = true }
                 SettingsNavRow(stringResource(R.string.settings_security_center), "", leftIcon = Icons.Outlined.Security) {
                     Toast.makeText(context, securityCenterToastText, Toast.LENGTH_LONG).show()
                 }
@@ -298,14 +315,24 @@ fun SettingsScreen(
             gifts = receivedGiftHistory,
             userProfilePhotos = userProfilePhotos,
             onOpenHistory = { showGiftHistoryListDialog = true },
-            onClose = { showGiftHistoryDialog = false }
+            onClose = { showGiftHistoryDialog = false },
+            onUserAvatarClick = { uid ->
+                if (uid.isNotBlank()) {
+                    onOpenUserProfile(uid)
+                }
+            }
         )
     }
     if (showGiftHistoryListDialog) {
         GiftHistoryListDialog(
             gifts = receivedGiftHistory,
             userProfilePhotos = userProfilePhotos,
-            onClose = { showGiftHistoryListDialog = false }
+            onClose = { showGiftHistoryListDialog = false },
+            onUserAvatarClick = { uid ->
+                if (uid.isNotBlank()) {
+                    onOpenUserProfile(uid)
+                }
+            }
         )
     }
 
@@ -389,7 +416,10 @@ fun SettingsScreen(
                                     HorizontalDivider(color = Color(0xFFEDEDED))
                                     EditProfileRow(label = "Region", value = "India") {}
                                     HorizontalDivider(color = Color(0xFFEDEDED))
-                                    EditProfileRow(label = "Signature", value = "🙂") {}
+                                    EditProfileRow(
+                                        label = stringResource(R.string.edit_profile_signature),
+                                        value = signature.orEmpty().ifBlank { stringResource(R.string.signature_default) }
+                                    ) { showSignatureEditor = true }
                                 }
                             }
                         }
@@ -429,6 +459,43 @@ fun SettingsScreen(
             }
         }
     }
+    if (showSignatureEditor) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showSignatureEditor = false }) {
+            Card(
+                modifier = Modifier
+                    .padding(20.dp)
+                    .widthIn(min = 280.dp, max = 360.dp),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.edit_signature_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    OutlinedTextField(
+                        value = signatureDraft,
+                        onValueChange = { signatureDraft = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 2
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { showSignatureEditor = false },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(stringResource(R.string.cancel)) }
+                        Button(
+                            onClick = {
+                                scope.launch { viewModel.updateSignature(signatureDraft) }
+                                showSignatureEditor = false
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text(stringResource(R.string.save)) }
+                    }
+                }
+            }
+        }
+    }
 
     if (showStatsDialog) {
         StatsShowcaseDialog(
@@ -436,7 +503,12 @@ fun SettingsScreen(
             history = gameHistory,
             usernamesByUid = historyUsernames,
             userProfilePhotos = userProfilePhotos,
-            onClose = { showStatsDialog = false }
+            onClose = { showStatsDialog = false },
+            onUserAvatarClick = { uid ->
+                if (uid.isNotBlank()) {
+                    onOpenUserProfile(uid)
+                }
+            }
         )
     }
 }
@@ -481,161 +553,388 @@ private fun ShortcutItem(
 }
 
 @Composable
-private fun ProfilePreviewFullPage(
+internal fun ProfilePreviewFullPage(
     profilePictureUrl: String?,
     currentUsername: String?,
+    signature: String?,
+    receivedGiftHistory: List<ReceivedGiftSummary>,
+    friendUids: Set<String>,
+    historyUsernames: Map<String, String>,
+    userProfilePhotos: Map<String, String>,
+    gameHistory: List<GameHistoryEntry>,
     onBack: () -> Unit,
     onOpenGiftWall: () -> Unit,
     onOpenStats: () -> Unit,
+    onUserAvatarClick: (String) -> Unit,
+    contentBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.Black
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (profilePictureUrl.isNullOrBlank()) {
-                Image(
-                    painter = painterResource(R.drawable.ic_mascot_hero),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(360.dp),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                AsyncImage(
-                    model = profilePictureUrl,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxWidth().height(360.dp),
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(R.drawable.ic_mascot_hero),
-                    error = painterResource(R.drawable.ic_mascot_hero),
+    val topGiftPreview = remember(receivedGiftHistory) {
+        receivedGiftHistory
+            .groupBy { it.giftId ?: "__unknown__" }
+            .map { (giftId, rows) ->
+                val senderCounts = rows.groupBy { it.fromUserId ?: "__unknown__" }.mapValues { it.value.size }
+                val topSenderUid = senderCounts.maxByOrNull { it.value }?.key
+                val topSenderCount = senderCounts[topSenderUid] ?: 0
+                val topSenderName = rows.firstOrNull { it.fromUserId == topSenderUid }?.fromDisplayName
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "Unknown"
+                GiftWallCardUi(
+                    giftId = giftId,
+                    label = if (giftId == "__unknown__") "Gift" else GiftCatalog.displayLabel(giftId),
+                    count = rows.size,
+                    coins = rows.sumOf { it.coins },
+                    topSenderUid = topSenderUid,
+                    topSenderName = topSenderName,
+                    topSenderCount = topSenderCount,
+                    priceCoins = GiftCatalog.priceCoinsOrNull(giftId)?.toLong() ?: 0L
                 )
             }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
-                    tint = Color.White,
-                    modifier = Modifier.clickable { onBack() }
+            .sortedByDescending { it.coins }
+            .take(4)
+    }
+    val friendPreview = remember(friendUids, historyUsernames, userProfilePhotos) {
+        friendUids
+            .take(4)
+            .map { uid ->
+                FriendPreviewUi(
+                    uid = uid,
+                    name = historyUsernames[uid]?.takeIf { it.isNotBlank() } ?: FirebaseUidMapping.shortLabel(uid),
+                    profileImageUrl = userProfilePhotos[uid]
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            }
+    }
+    val gamePreview = remember(gameHistory) { gameHistory.take(4) }
+    val contributorsRanking = remember(receivedGiftHistory, historyUsernames, userProfilePhotos) {
+        val realRanking = receivedGiftHistory
+            .mapNotNull { it.fromUserId?.takeIf { uid -> uid.isNotBlank() } }
+            .distinct()
+            .map { uid ->
+                val rows = receivedGiftHistory.filter { it.fromUserId == uid }
+                ContributorRankUi(
+                    uid = uid,
+                    name = rows.firstOrNull { !it.fromDisplayName.isNullOrBlank() }?.fromDisplayName
+                        ?: historyUsernames[uid]
+                        ?: FirebaseUidMapping.shortLabel(uid),
+                    coins = rows.sumOf { it.coins },
+                    profileImageUrl = userProfilePhotos[uid]
+                )
+            }
+            .sortedByDescending { it.coins }
+        if (realRanking.size >= 4) {
+            realRanking
+        } else {
+            val dummyUsers = (realRanking.size + 1..4).map { rank ->
+                ContributorRankUi(
+                    uid = "dummy_contributor_$rank",
+                    name = "User $rank",
+                    coins = 0L,
+                    profileImageUrl = null
+                )
+            }
+            realRanking + dummyUsers
+        }
+    }
+    var selectedGift by remember(topGiftPreview) { mutableStateOf<GiftWallCardUi?>(null) }
+    var showFriendsDialog by remember { mutableStateOf(false) }
+    var showContributorsDialog by remember { mutableStateOf(false) }
+    val openUserProfileFromDialog: (String) -> Unit = { uid ->
+        if (uid.isNotBlank()) {
+            // Close current overlays before opening next profile, so new profile is visible immediately.
+            showFriendsDialog = false
+            showContributorsDialog = false
+            selectedGift = null
+            onUserAvatarClick(uid)
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.White
+    ) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 10.dp, vertical = 8.dp)
+                .padding(bottom = contentBottomPadding),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Icon(
-                        imageVector = Icons.Outlined.AddPhotoAlternate,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.Person,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.clickable { onBack() }
                     )
                 }
             }
-
-            Card(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 560.dp)
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                  border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
                 ) {
-                    item {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(30.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SenderAvatarChip(profileImageUrl = profilePictureUrl, size = 130.dp)
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = currentUsername.orEmpty().ifBlank { "Maya" },
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF3F2E44)
+                                    )
+                                }
+                                Text(
+                                    signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
+                                    color = Color(0xFF6B4E58)
+                                )
+                                Text(
+                                    "Silver II ✧",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF4B5563)
+                                )
+                                Text("Soul: 5,380", color = Color(0xFF4B5563))
+                            }
+                        }
+                        HorizontalDivider(
+                            color = Color(0xFFEAEAEA),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
-                                Text(
-                                    text = currentUsername.orEmpty().ifBlank { "Player" },
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "ID:${FirebaseUidMapping.shortLabel(currentUsername ?: "user")}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
                             Text(
-                                text = "India",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                "Thanks for the gifts! 🏆",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF5B4458)
+                            )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            if (topGiftPreview.isEmpty()) {
+                                GiftPreviewTile("🎁", "0", Modifier.weight(1f))
+                            } else {
+                                topGiftPreview.forEach { gift ->
+                                    GiftPreviewTile(
+                                        emoji = giftEmoji(gift.giftId),
+                                        count = gift.count.toString(),
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { selectedGift = gift }
+                                    )
+                                }
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Total Gifts ${receivedGiftHistory.size}",
+                                color = Color(0xFF6B7280),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                "See all",
+                                color = Color(0xFF7C3AED),
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.clickable { onOpenGiftWall() }
                             )
                         }
                     }
-                    item {
-                        SectionNavRow("Moments 80") { }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            items(listOf(1, 2, 3)) {
-                                Card(
-                                    modifier = Modifier.size(width = 80.dp, height = 64.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                                ) {}
+                }
+            }
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.settings_signature),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = Color(0xFF5E4B57)
+                        )
+                    }
+                }
+            }
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionEndArrowRow(
+                            title = "Friends",
+                            trailing = friendPreview.size.toString(),
+                            onArrowClick = { showFriendsDialog = true }
+                        )
+                        if (friendPreview.isEmpty()) {
+                            Text("No friends yet", color = Color(0xFF6B7280), style = MaterialTheme.typography.bodyMedium)
+                        } else {
+                            friendPreview.chunked(2).forEach { rowItems ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    rowItems.forEachIndexed { index, f ->
+                                        if (friendPreview.size > 2) {
+                                            FriendMiniClassicTile(
+                                                name = f.name,
+                                                profileImageUrl = f.profileImageUrl,
+                                                onClick = { openUserProfileFromDialog(f.uid) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .wrapContentHeight()
+                                            )
+                                        } else {
+                                            FriendMiniTile(
+                                                name = f.name,
+                                                profileImageUrl = f.profileImageUrl,
+                                                onClick = { openUserProfileFromDialog(f.uid) },
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .wrapContentHeight()
+                                            )
+                                        }
+                                    }
+                                    if (rowItems.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
                     }
-                    item {
-                        SectionNavRow("Gift Wall") { onOpenGiftWall() }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Card(
+                }
+            }
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF1EEFF)),
-                            shape = RoundedCornerShape(16.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("166\nGift", style = MaterialTheme.typography.titleMedium)
-                                Text("210\nStar", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Contributors",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                contributorsRanking.take(3).forEach { g ->
+                                    SenderAvatarChip(
+                                        profileImageUrl = g.profileImageUrl,
+                                        size = 42.dp,
+                                        onClick = { openUserProfileFromDialog(g.uid) }
+                                    )
+                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(14.dp)
+                                        .clickable { showContributorsDialog = true },
+                                    tint = Color(0xFF6B7280)
+                                )
                             }
                         }
-                    }
-                    item { SectionNavRow("Signature", trailingText = "🙂") { } }
-                    item { SectionNavRow("BFF ❤️ 6") { } }
-                    item { SectionNavRow("Guard") { } }
-                    item { SectionNavRow("Advanced Room") { } }
-                    item { SectionNavRow("Stats") { onOpenStats() } }
-                    item {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Button(
-                                onClick = { onOpenGiftWall() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(999.dp),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFF472B6))
-                            ) { Text("Send Gift") }
-                            Button(
-                                onClick = { onBack() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(999.dp),
-                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF60A5FA))
-                            ) { Text("Chat") }
+                        if (contributorsRanking.isEmpty()) {
+                            Text("No contributors yet", color = Color(0xFF6B7280), style = MaterialTheme.typography.bodyMedium)
                         }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+//                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SectionEndArrowRow(
+                            title = "Stats",
+                            trailing = "${gameHistory.size} Games",
+                            onArrowClick = onOpenStats
+                        )
                     }
                 }
             }
         }
     }
+    selectedGift?.let { gift ->
+        GiftDetailDialog(
+            gift = gift,
+            userProfilePhotos = userProfilePhotos,
+            onDismiss = { selectedGift = null },
+            onUserAvatarClick = openUserProfileFromDialog
+        )
+    }
+    if (showFriendsDialog) {
+        FriendsShowcaseDialog(
+            currentUsername = currentUsername.orEmpty().ifBlank { "You" },
+            profilePictureUrl = profilePictureUrl,
+            friendPreview = friendPreview,
+            onClose = { showFriendsDialog = false },
+            onUserAvatarClick = openUserProfileFromDialog
+        )
+    }
+    if (showContributorsDialog) {
+        ContributorsRankingDialog(
+            currentUsername = currentUsername.orEmpty().ifBlank { "You" },
+            profilePictureUrl = profilePictureUrl,
+            ranking = contributorsRanking,
+            onClose = { showContributorsDialog = false },
+            onUserAvatarClick = openUserProfileFromDialog
+        )
+    }
 }
+
 
 @Composable
 private fun ProfilePictureDisplay(
@@ -912,7 +1211,7 @@ private fun SectionNavRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (trailingText.isNotBlank()) {
                 Text(trailingText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -927,6 +1226,426 @@ private fun SectionNavRow(
         }
     }
 }
+
+@Composable
+private fun InfoChip(
+    label: String,
+    color: Color,
+) {
+    Card(
+        shape = RoundedCornerShape(999.dp),
+        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.16f))
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = color,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
+private fun GiftPreviewTile(
+    emoji: String,
+    count: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    Card(
+        modifier = if (onClick != null) modifier.clickable { onClick() } else modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4F4)),
+//        border = BorderStroke(0.5.dp, Color(0xFFE7D8D8))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(emoji, style = MaterialTheme.typography.headlineMedium)
+            Text("x $count", style = MaterialTheme.typography.titleMedium, color = Color(0xFF4B5563), fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun SectionEndArrowRow(
+    title: String,
+    trailing: String,
+    onArrowClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(trailing, color = Color(0xFF6B7280), style = MaterialTheme.typography.bodySmall)
+            Spacer(modifier = Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Outlined.ArrowForwardIos,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable { onArrowClick() },
+                tint = Color(0xFF6B7280)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FriendMiniTile(
+    name: String,
+    profileImageUrl: String?,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(0.8.dp, Color(0xFFFBCFE8))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.linearGradient(
+                        colors = listOf(Color(0xFFFBCFE8), Color(0xFFF9A8D4))
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                .padding(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "🛵",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                SenderAvatarChip(profileImageUrl = profileImageUrl, size = 50.dp, onClick = onClick)
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    fontSize = 20.sp,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendMiniClassicTile(
+    name: String,
+    profileImageUrl: String?,
+    onClick: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF4F4)),
+//        border = BorderStroke(0.5.dp, Color(0xFFE7D8D8))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SenderAvatarChip(profileImageUrl = profileImageUrl, size = 40.dp, onClick = onClick)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text("Recent", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF6B7280))
+            }
+        }
+    }
+}
+
+@Composable
+private fun GameMiniChip(
+) {
+        Image(
+            painter = painterResource(R.drawable.ic_game_role_pack),
+            contentDescription = "Game logo",
+            modifier = Modifier
+                .size(34.dp)
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            contentScale = ContentScale.Crop
+        )
+}
+
+@Composable
+private fun FriendsShowcaseDialog(
+    currentUsername: String,
+    profilePictureUrl: String?,
+    friendPreview: List<FriendPreviewUi>,
+    onClose: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFFFFFBFF)
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = null,
+                                modifier = Modifier.clickable { onClose() }
+                            )
+                            Text("Friends", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                item {
+
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(3),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 220.dp, max = 420.dp)
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val tiles = friendPreview.take(6)
+                            if (tiles.isEmpty()) {
+                                item {
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
+                                        border = BorderStroke(0.8.dp, Color(0xFFE5E7EB))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text("No friends yet", color = Color(0xFF9CA3AF))
+                                        }
+                                    }
+                                }
+                            } else {
+                                items(tiles.size) { idx ->
+                                    val f = tiles[idx]
+                                    Card(
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (idx % 2 == 0) Color(0xFFF9A8D4) else Color(0xFF93C5FD)
+                                        )
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Text("🎁", style = MaterialTheme.typography.headlineSmall)
+                                            SenderAvatarChip(
+                                                profileImageUrl = f.profileImageUrl,
+                                                size = 28.dp,
+                                                onClick = { onUserAvatarClick(f.uid) }
+                                            )
+                                            Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContributorsRankingDialog(
+    currentUsername: String,
+    profilePictureUrl: String?,
+    ranking: List<ContributorRankUi>,
+    onClose: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color(0xFFFFFBFF)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = null,
+                            modifier = Modifier.clickable { onClose() }
+                        )
+                        Text("Contributors", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Card(
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SenderAvatarChip(profileImageUrl = profilePictureUrl, size = 58.dp)
+                        Text(currentUsername, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                Text("Contributors Ranking", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                val top = ranking.take(3)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    top.getOrNull(1)?.let { ContributorTopCard(it, style = "silver", onUserAvatarClick = onUserAvatarClick) }
+                    top.getOrNull(0)?.let { ContributorTopCard(it, style = "gold", onUserAvatarClick = onUserAvatarClick) }
+                    top.getOrNull(2)?.let { ContributorTopCard(it, style = "bronze", onUserAvatarClick = onUserAvatarClick) }
+                }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val rest = ranking.drop(3)
+                    if (rest.isEmpty()) {
+                        item {
+                            Text(
+                                "More contributors ranking will appear here",
+                                color = Color(0xFF9CA3AF),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    } else {
+                        items(rest.withIndex().toList(), key = { it.value.uid }) { indexed ->
+                            val rank = indexed.index + 4
+                            val item = indexed.value
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(rank.toString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    SenderAvatarChip(
+                                        profileImageUrl = item.profileImageUrl,
+                                        size = 36.dp,
+                                        onClick = { onUserAvatarClick(item.uid) }
+                                    )
+                                    Text(item.name, style = MaterialTheme.typography.titleMedium)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(item.coins.toString().padStart(4, '0'), color = Color(0xFFBE185D), fontWeight = FontWeight.Bold)
+                                    Text("Coins", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodySmall)
+                                }
+                            }
+                            HorizontalDivider(color = Color(0xFFE5E7EB))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContributorTopCard(
+    item: ContributorRankUi,
+    style: String,
+    onUserAvatarClick: (String) -> Unit = {},
+) {
+    val (bg, border) = when (style) {
+        "gold" -> Color(0xFFFFF3D1) to Color(0xFFEAB308)
+        "silver" -> Color(0xFFEFF3FA) to Color(0xFF94A3B8)
+        "bronze" -> Color(0xFFFFE9DF) to Color(0xFFD6A58B)
+        else -> Color(0xFFF8F1EC) to Color(0xFFE5D1C5)
+    }
+    Card(
+        modifier = Modifier.width(if (style == "gold") 120.dp else 106.dp),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = bg),
+        border = BorderStroke(1.dp, border)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            SenderAvatarChip(
+                profileImageUrl = item.profileImageUrl,
+                size = if (style == "gold") 62.dp else 54.dp,
+                onClick = { onUserAvatarClick(item.uid) }
+            )
+            Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(item.coins.toString().padStart(4, '0'), color = Color(0xFFBE185D), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+private data class FriendPreviewUi(
+    val uid: String,
+    val name: String,
+    val profileImageUrl: String?,
+)
+
+private data class ContributorRankUi(
+    val uid: String,
+    val name: String,
+    val coins: Long,
+    val profileImageUrl: String?,
+)
 
 @Composable
 private fun PolicyLikePageDialog(
@@ -970,11 +1689,12 @@ private fun PolicyLikePageDialog(
 
 
 @Composable
-private fun GiftWallShowcaseDialog(
+internal fun GiftWallShowcaseDialog(
     gifts: List<ReceivedGiftSummary>,
     userProfilePhotos: Map<String, String>,
     onOpenHistory: () -> Unit,
     onClose: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
 ) {
     var selectedGift by remember(gifts) { mutableStateOf<GiftWallCardUi?>(null) }
     val grouped = remember(gifts) {
@@ -1079,7 +1799,8 @@ private fun GiftWallShowcaseDialog(
                                     ) {
                                         SenderAvatarChip(
                                             profileImageUrl = gift.topSenderUid?.let { userProfilePhotos[it] },
-                                            size = 24.dp
+                                            size = 24.dp,
+                                            onClick = { gift.topSenderUid?.let(onUserAvatarClick) }
                                         )
                                     }
                                     Spacer(modifier = Modifier.height(4.dp))
@@ -1107,105 +1828,23 @@ private fun GiftWallShowcaseDialog(
         }
     }
     selectedGift?.let { gift ->
-        androidx.compose.ui.window.Dialog(onDismissRequest = { selectedGift = null }) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF223749)),
-                border = BorderStroke(0.8.dp, Color(0xFF4D7690))
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(90.dp)
-                            .background(
-                                brush = Brush.verticalGradient(listOf(Color(0xFF36576F), Color(0xFF243B4D))),
-                                shape = RoundedCornerShape(14.dp)
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        GiftArt(giftId = gift.giftId, modifier = Modifier.size(90.dp))
-                    }
-                    Text(
-                        cleanGiftLabel(gift.label),
-                        color = Color.White,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SenderAvatarChip(profileImageUrl = gift.topSenderUid?.let { userProfilePhotos[it] }, size = 28.dp)
-                            Text(
-                                text = "With the most gifts",
-                                color = Color(0xFFCBD5E1),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                        Text("x${gift.topSenderCount}", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    }
-                    Text(
-                        text = gift.topSenderName,
-                        color = Color.White,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(Color(0xFF5A7488), RoundedCornerShape(999.dp))
-                    )
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Price", color = Color(0xFFCBD5E1))
-                        Text("🪙 ${gift.priceCoins}", color = Color(0xFFFBBF24), fontWeight = FontWeight.SemiBold)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Amount (sends)", color = Color(0xFFCBD5E1))
-                        Text("${gift.count}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Max user sent", color = Color(0xFFCBD5E1))
-                        Text("x${gift.topSenderCount}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Received Coins", color = Color(0xFFCBD5E1))
-                        Text("${gift.coins}", color = Color.White, fontWeight = FontWeight.SemiBold)
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        OutlinedButton(
-                            onClick = { selectedGift = null },
-                            shape = RoundedCornerShape(999.dp),
-                            border = BorderStroke(0.8.dp, Color(0xFF6F8CA1)),
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 2.dp)
-                        ) {
-                            Text("Close", color = Color.White)
-                        }
-                    }
-                }
-            }
-        }
+        GiftDetailDialog(
+            gift = gift,
+            userProfilePhotos = userProfilePhotos,
+            onDismiss = { selectedGift = null },
+            onUserAvatarClick = onUserAvatarClick
+        )
     }
 }
 
 @Composable
-private fun StatsShowcaseDialog(
+internal fun StatsShowcaseDialog(
     imageUrl: String?,
     history: List<GameHistoryEntry>,
     usernamesByUid: Map<String, String>,
     userProfilePhotos: Map<String, String>,
     onClose: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
 ) {
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
@@ -1233,7 +1872,7 @@ private fun StatsShowcaseDialog(
                                 tint = Color.White
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("My Statistics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
+                            Text("Statistics", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = Color.White)
                         }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
@@ -1277,7 +1916,8 @@ private fun StatsShowcaseDialog(
                         StatsHistoryRow(
                             entry = entry,
                             usernamesByUid = usernamesByUid,
-                            userProfilePhotos = userProfilePhotos
+                            userProfilePhotos = userProfilePhotos,
+                            onUserAvatarClick = onUserAvatarClick
                         )
                         HorizontalDivider(color = Color(0xFFE5E7EB))
                     }
@@ -1297,6 +1937,108 @@ private data class GiftWallCardUi(
     val topSenderCount: Int,
     val priceCoins: Long,
 )
+
+@Composable
+private fun GiftDetailDialog(
+    gift: GiftWallCardUi,
+    userProfilePhotos: Map<String, String>,
+    onDismiss: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
+) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF223749)),
+            border = BorderStroke(0.8.dp, Color(0xFF4D7690))
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(90.dp)
+                        .background(
+                            brush = Brush.verticalGradient(listOf(Color(0xFF36576F), Color(0xFF243B4D))),
+                            shape = RoundedCornerShape(14.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    GiftArt(giftId = gift.giftId, modifier = Modifier.size(90.dp))
+                }
+                Text(
+                    cleanGiftLabel(gift.label),
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SenderAvatarChip(
+                            profileImageUrl = gift.topSenderUid?.let { userProfilePhotos[it] },
+                            size = 28.dp,
+                            onClick = { gift.topSenderUid?.let(onUserAvatarClick) }
+                        )
+                        Text(
+                            text = "With the most gifts",
+                            color = Color(0xFFCBD5E1),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    Text("x${gift.topSenderCount}", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    text = gift.topSenderName,
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(Color(0xFF5A7488), RoundedCornerShape(999.dp))
+                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Price", color = Color(0xFFCBD5E1))
+                    Text("🪙 ${gift.priceCoins}", color = Color(0xFFFBBF24), fontWeight = FontWeight.SemiBold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Amount (sends)", color = Color(0xFFCBD5E1))
+                    Text("${gift.count}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Max user sent", color = Color(0xFFCBD5E1))
+                    Text("x${gift.topSenderCount}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Received Coins", color = Color(0xFFCBD5E1))
+                    Text("${gift.coins}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(999.dp),
+                        border = BorderStroke(0.8.dp, Color(0xFF6F8CA1)),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 20.dp, vertical = 2.dp)
+                    ) {
+                        Text("Close", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun GiftArt(
@@ -1353,10 +2095,11 @@ private fun giftEmoji(giftId: String): String = when (giftId) {
 }
 
 @Composable
-private fun GiftHistoryListDialog(
+internal fun GiftHistoryListDialog(
     gifts: List<ReceivedGiftSummary>,
     userProfilePhotos: Map<String, String>,
     onClose: () -> Unit,
+    onUserAvatarClick: (String) -> Unit = {},
 ) {
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
@@ -1398,7 +2141,11 @@ private fun GiftHistoryListDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SenderAvatarChip(profileImageUrl = g.fromUserId?.let { userProfilePhotos[it] }, size = 24.dp)
+                                    SenderAvatarChip(
+                                        profileImageUrl = g.fromUserId?.let { userProfilePhotos[it] },
+                                        size = 24.dp,
+                                        onClick = { g.fromUserId?.let(onUserAvatarClick) }
+                                    )
                                     Column {
                                         Text(sender, color = Color.White, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1425,12 +2172,14 @@ private fun GiftHistoryListDialog(
 private fun SenderAvatarChip(
     profileImageUrl: String?,
     size: androidx.compose.ui.unit.Dp = 20.dp,
+    onClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
             .size(size)
             .clip(RoundedCornerShape(10.dp))
             .background(Color(0xFFE5E7EB))
+            .let { base -> if (onClick != null) base.clickable { onClick() } else base }
             .then(
                 Modifier
                     .background(Color(0xFFE5E7EB), RoundedCornerShape(10.dp))
@@ -1467,6 +2216,7 @@ private fun StatsHistoryRow(
     entry: GameHistoryEntry,
     usernamesByUid: Map<String, String>,
     userProfilePhotos: Map<String, String>,
+    onUserAvatarClick: (String) -> Unit = {},
 ) {
     var expanded by remember(entry.id) { mutableStateOf(false) }
     Row(
@@ -1491,7 +2241,11 @@ private fun StatsHistoryRow(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(players) { uid ->
                     displayNameForUid(uid, usernamesByUid)
-                    SenderAvatarChip(profileImageUrl = userProfilePhotos[uid], size = 28.dp)
+                    SenderAvatarChip(
+                        profileImageUrl = userProfilePhotos[uid],
+                        size = 28.dp,
+                        onClick = { onUserAvatarClick(uid) }
+                    )
                 }
             }
             Text(

@@ -13,9 +13,11 @@ object SoulplayDestinations {
     fun voiceRoom(roomId: String) = "voice_room/$roomId"
 
     const val Settings = "settings"
+    const val UserProfile = "user_profile/{uid}"
 
     const val Chat = "chat"
     const val ChatThread = "chat_thread/{peerUid}"
 
     fun chatThread(peerUid: String) = "chat_thread/$peerUid"
+    fun userProfile(uid: String) = "user_profile/$uid"
 }

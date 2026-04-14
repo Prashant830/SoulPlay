@@ -176,7 +176,7 @@ class FirestoreSocialRepository(
 
     override fun observeChatMessages(peerUid: String): Flow<List<ChatMessage>> = callbackFlow {
         val me = auth.currentUser?.uid
-        if (me.isNullOrBlank() || peerUid.isBlank() || peerUid == me) {
+        if (me.isNullOrBlank() || peerUid.isBlank()) {
             trySend(emptyList())
             awaitClose { }
             return@callbackFlow
@@ -210,10 +210,10 @@ class FirestoreSocialRepository(
             ?: return Result.failure(IllegalStateException("Not signed in"))
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return Result.failure(IllegalArgumentException("Empty message"))
-        if (peerUid.isBlank() || peerUid == me) {
+        if (peerUid.isBlank()) {
             return Result.failure(IllegalArgumentException("Invalid chat"))
         }
-        if (!_friends.value.contains(peerUid)) {
+        if (peerUid != me && !_friends.value.contains(peerUid)) {
             return Result.failure(IllegalStateException("You can only chat with friends"))
         }
         val chatId = directChatId(me, peerUid)
@@ -262,7 +262,7 @@ class FirestoreSocialRepository(
     override suspend fun markChatAsRead(peerUid: String): Result<Unit> {
         val me = auth.currentUser?.uid
             ?: return Result.failure(IllegalStateException("Not signed in"))
-        if (peerUid.isBlank() || peerUid == me) {
+        if (peerUid.isBlank()) {
             return Result.failure(IllegalArgumentException("Invalid chat"))
         }
         return runCatching {

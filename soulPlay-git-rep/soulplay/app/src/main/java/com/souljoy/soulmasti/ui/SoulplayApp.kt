@@ -47,6 +47,7 @@ import com.souljoy.soulmasti.ui.auth.CreateProfileScreen
 import com.souljoy.soulmasti.ui.auth.LoginScreen
 import com.souljoy.soulmasti.ui.navigation.SoulplayDestinations
 import com.souljoy.soulmasti.ui.settings.SettingsScreen
+import com.souljoy.soulmasti.ui.settings.UserProfileScreen
 import com.souljoy.soulmasti.ui.shop.GoldShopScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomNeedMatchScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomScreen
@@ -99,6 +100,7 @@ fun SoulplayApp(
             route.contains("login") ||
             route.contains("create_profile") ||
             route.contains("auth_gate") ||
+            route.contains("user_profile") ||
             route.contains(SoulplayDestinations.GoldShop)
     val showBottomBar = !hideBottomBar
 
@@ -325,7 +327,12 @@ fun SoulplayApp(
                         navController.navigate(SoulplayDestinations.chatThread(peerUid)) {
                             launchSingleTop = false
                         }
-                    }
+                    },
+                    onOpenUserProfile = { uid ->
+                        if (uid.isNotBlank()) {
+                            navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                        }
+                    },
                 )
             }
             composable(
@@ -343,7 +350,12 @@ fun SoulplayApp(
                         koinViewModel(parameters = { parametersOf(peerUid) })
                     ChatThreadScreen(
                         viewModel = threadVm,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onOpenPeerProfile = { uid ->
+                            if (uid.isNotBlank()) {
+                                navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                            }
+                        }
                     )
                 }
             }
@@ -353,8 +365,35 @@ fun SoulplayApp(
                         navController.navigate(SoulplayDestinations.Login) {
                             popUpTo(navController.graph.findStartDestination().id) { inclusive = true }
                         }
-                    }
+                    },
+                    onOpenUserProfile = { uid ->
+                        if (uid.isNotBlank()) {
+                            navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                        }
+                    },
                 )
+            }
+            composable(
+                route = SoulplayDestinations.UserProfile,
+                arguments = listOf(navArgument("uid") { type = NavType.StringType })
+            ) { entry ->
+                val uid = entry.arguments?.getString("uid").orEmpty()
+                LaunchedEffect(uid) {
+                    if (uid.isBlank()) navController.popBackStack()
+                }
+                if (uid.isNotBlank()) {
+                    UserProfileScreen(
+                        uid = uid,
+                        onBack = { navController.popBackStack() },
+                        onOpenChatThread = { peerUid ->
+                            if (peerUid.isNotBlank()) {
+                                navController.navigate(SoulplayDestinations.chatThread(peerUid)) {
+                                    launchSingleTop = false
+                                }
+                            }
+                        }
+                    )
+                }
             }
         }
     }

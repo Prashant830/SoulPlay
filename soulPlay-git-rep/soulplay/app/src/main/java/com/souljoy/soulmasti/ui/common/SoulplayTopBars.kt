@@ -1,5 +1,6 @@
 package com.souljoy.soulmasti.ui.common
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -87,6 +88,7 @@ fun SoulplayChatThreadTopBar(
     peerName: String,
     peerPhotoUrl: String?,
     onBack: () -> Unit,
+    onPeerProfileClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -109,6 +111,7 @@ fun SoulplayChatThreadTopBar(
                         photoUrl = peerPhotoUrl,
                         contentDescription = peerName,
                         size = 36.dp,
+                        modifier = Modifier.clickable { onPeerProfileClick() },
                     )
                     Text(
                         text = peerName,

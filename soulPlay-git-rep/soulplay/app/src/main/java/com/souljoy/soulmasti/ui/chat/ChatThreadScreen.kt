@@ -57,6 +57,7 @@ private val BubbleOtherOnGray = Color(0xFF0F172A)
 fun ChatThreadScreen(
     viewModel: ChatThreadViewModel,
     onBack: () -> Unit,
+    onOpenPeerProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val messages by viewModel.messages.collectAsStateWithLifecycle()
@@ -126,6 +127,7 @@ fun ChatThreadScreen(
                 peerName = peerName,
                 peerPhotoUrl = peerPhotoUrl,
                 onBack = onBack,
+                onPeerProfileClick = { onOpenPeerProfile(viewModel.peerUid) },
             )
         }
     ) { padding ->

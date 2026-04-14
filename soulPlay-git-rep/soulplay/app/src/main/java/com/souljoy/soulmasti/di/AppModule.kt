@@ -45,7 +45,7 @@ val appModule = module {
     viewModel { LoginViewModel(get()) }
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }
     viewModel { SettingsViewModel(androidApplication(), get(), get(), get(), get(), get()) }
-    viewModel { ChatViewModel(androidApplication(), get(), get()) }
+    viewModel { ChatViewModel(androidApplication(), get(), get(), get()) }
     viewModel { params ->
         ChatThreadViewModel(
             androidApplication(),

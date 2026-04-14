@@ -3,6 +3,7 @@ package com.souljoy.soulmasti.ui.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.model.FriendRequest
@@ -25,13 +26,20 @@ class ChatViewModel(
     application: Application,
     private val social: SocialRepository,
     private val database: FirebaseDatabase,
+    private val auth: FirebaseAuth,
 ) : AndroidViewModel(application) {
+    companion object {
+        // Process-lifetime cache to avoid refetching profile previews on each chat screen re-open.
+        private val previewCache = mutableMapOf<String, RtdbUserPreview>()
+    }
+    val myUid: String? get() = auth.currentUser?.uid
+
 
     val incomingFriendRequests: StateFlow<List<FriendRequest>> = social.incomingFriendRequests
     val friends: StateFlow<Set<String>> = social.friends
     val unreadMessageCounts: StateFlow<Map<String, Int>> = social.unreadMessageCounts
 
-    private val _userPreviews = MutableStateFlow<Map<String, RtdbUserPreview>>(emptyMap())
+    private val _userPreviews = MutableStateFlow<Map<String, RtdbUserPreview>>(previewCache.toMap())
     val userPreviews: StateFlow<Map<String, RtdbUserPreview>> = _userPreviews.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
@@ -44,7 +52,8 @@ class ChatViewModel(
                 social.friends,
                 social.unreadMessageCounts
             ) { reqs, friendSet, unread ->
-                reqs.map { it.fromUid }.toSet() + friendSet + unread.keys
+                val me = auth.currentUser?.uid
+                reqs.map { it.fromUid }.toSet() + friendSet + unread.keys + setOfNotNull(me)
             }.collect { uids -> preloadUserPreviewsFromRtdb(uids) }
         }
     }
@@ -69,7 +78,9 @@ class ChatViewModel(
             }
             loaded[uid] = preview
         }
-        _userPreviews.value = known + loaded
+        val merged = known + loaded
+        _userPreviews.value = merged
+        previewCache.putAll(loaded)
     }
 
     fun dismissError() {

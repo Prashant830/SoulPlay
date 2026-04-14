@@ -113,6 +113,8 @@
     <string name="edit_profile_region">Region</string>
     <string name="edit_profile_signature">Signature</string>
     <string name="edit_nickname_title">Edit nickname</string>
+    <string name="edit_signature_title">Edit signature</string>
+    <string name="signature_default">🙂</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
 

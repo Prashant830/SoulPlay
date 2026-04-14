@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,7 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,6 +27,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -38,6 +41,7 @@ import com.souljoy.soulmasti.R
 fun ChatScreen(
     viewModel: ChatViewModel,
     onOpenThread: (String) -> Unit,
+    onOpenUserProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val incoming by viewModel.incomingFriendRequests.collectAsStateWithLifecycle()
@@ -45,6 +49,10 @@ fun ChatScreen(
     val userPreviews by viewModel.userPreviews.collectAsStateWithLifecycle()
     val unreadByPeer by viewModel.unreadMessageCounts.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val selfUid = viewModel.myUid
+    val chatPeers = remember(friends, selfUid) {
+        if (selfUid.isNullOrBlank()) friends.sorted() else (friends + selfUid).sorted()
+    }
 
     Column(
         modifier = modifier
@@ -122,10 +130,12 @@ fun ChatScreen(
                 items(incoming, key = { it.fromUid }) { req ->
                     val preview = userPreviews[req.fromUid]
                     FriendRequestRow(
+                        uid = req.fromUid,
                         displayName = preview?.displayName ?: viewModel.displayNameFor(req.fromUid),
                         photoUrl = preview?.photoUrl,
                         onAccept = { viewModel.accept(req.fromUid) },
-                        onDecline = { viewModel.decline(req.fromUid) }
+                        onDecline = { viewModel.decline(req.fromUid) },
+                        onOpenUserProfile = onOpenUserProfile
                     )
                 }
             }
@@ -135,12 +145,12 @@ fun ChatScreen(
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = stringResource(R.string.friends_count, friends.size),
+                    text = stringResource(R.string.friends_count, chatPeers.size),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            if (friends.isEmpty()) {
+            if (chatPeers.isEmpty()) {
                 item {
                     Text(
                         text = stringResource(R.string.no_friends_hint),
@@ -149,15 +159,21 @@ fun ChatScreen(
                     )
                 }
             } else {
-                items(friends.sorted(), key = { it }) { uid ->
+                items(chatPeers, key = { it }) { uid ->
                     val preview = userPreviews[uid]
                     val unread = unreadByPeer[uid] ?: 0
-                    FriendRow(
-                        displayName = preview?.displayName ?: viewModel.displayNameFor(uid),
-                        photoUrl = preview?.photoUrl,
-                        unreadCount = unread,
-                        onOpen = { onOpenThread(uid) }
-                    )
+                    if (preview == null) {
+                        FriendRowLoading()
+                    } else {
+                        FriendRow(
+                            uid = uid,
+                            displayName = preview.displayName,
+                            photoUrl = preview.photoUrl,
+                            unreadCount = unread,
+                            onOpen = { onOpenThread(uid) },
+                            onOpenUserProfile = onOpenUserProfile
+                        )
+                    }
                 }
             }
         }
@@ -165,11 +181,39 @@ fun ChatScreen(
 }
 
 @Composable
+private fun FriendRowLoading() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp
+            )
+            Text(
+                text = "Loading profile...",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp)
+            )
+        }
+    }
+}
+
+@Composable
 private fun FriendRequestRow(
+    uid: String,
     displayName: String,
     photoUrl: String?,
     onAccept: () -> Unit,
-    onDecline: () -> Unit
+    onDecline: () -> Unit,
+    onOpenUserProfile: (String) -> Unit = {},
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -184,7 +228,8 @@ private fun FriendRequestRow(
             ChatProfileAvatar(
                 photoUrl = photoUrl,
                 contentDescription = displayName,
-                size = 52.dp
+                size = 52.dp,
+                modifier = Modifier.clickable { onOpenUserProfile(uid) }
             )
             Column(
                 modifier = Modifier
@@ -224,10 +269,12 @@ private fun FriendRequestRow(
 
 @Composable
 private fun FriendRow(
+    uid: String,
     displayName: String,
     photoUrl: String?,
     unreadCount: Int,
-    onOpen: () -> Unit
+    onOpen: () -> Unit,
+    onOpenUserProfile: (String) -> Unit = {},
 ) {
     Card(
         modifier = Modifier
@@ -244,7 +291,8 @@ private fun FriendRow(
             ChatProfileAvatar(
                 photoUrl = photoUrl,
                 contentDescription = displayName,
-                size = 48.dp
+                size = 48.dp,
+                modifier = Modifier.clickable { onOpenUserProfile(uid) }
             )
             Column(
                 modifier = Modifier
