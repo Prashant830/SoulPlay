@@ -17,6 +17,7 @@ koin = "4.0.0"
 kotlinxCoroutines = "1.10.2"
 navigationCompose = "2.8.9"
 firebaseDatabase = "22.0.1"
+foundation = "1.10.6"
 
 [libraries]
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
@@ -47,6 +48,7 @@ firebase-database-ktx = { group = "com.google.firebase", name = "firebase-databa
 firebase-auth-ktx = { group = "com.google.firebase", name = "firebase-auth-ktx" }
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "kotlinxCoroutines" }
 firebase-database = { group = "com.google.firebase", name = "firebase-database", version.ref = "firebaseDatabase" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "foundation" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

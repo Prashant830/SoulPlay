@@ -894,6 +894,7 @@ internal fun ProfilePreviewFullPage(
                 Card(
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth().padding(0.dp,0.dp,0.dp,70.dp)
 //                    border = BorderStroke(0.6.dp, Color(0xFFE7D8D8))
                 ) {
                     Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -905,6 +906,9 @@ internal fun ProfilePreviewFullPage(
                     }
                 }
             }
+
+
+
         }
     }
     selectedGift?.let { gift ->

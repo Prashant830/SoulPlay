@@ -244,7 +244,7 @@ fun UserProfileScreen(
                     onBack = onBack,
                     onOpenGiftWall = { showGiftWall = true },
                     onOpenStats = { showStats = true },
-                contentBottomPadding = 110.dp,
+                    contentBottomPadding = 0.dp,
                     onUserAvatarClick = { tappedUid ->
                         if (tappedUid.isNotBlank() && tappedUid != currentUid) {
                             currentUid = tappedUid
@@ -270,8 +270,8 @@ fun UserProfileScreen(
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(
-                                            Color(0xFFF85D8A).copy(alpha = 0.62f),
-                                            Color(0xFFF58AB8).copy(alpha = 0.62f)
+                                            Color(0xFFF85D8A).copy(alpha = 0.80f),
+                                            Color(0xFFF58AB8).copy(alpha = 0.80f)
                                         )
                                     ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
@@ -293,8 +293,8 @@ fun UserProfileScreen(
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(
-                                            Color(0xFF57AEE8).copy(alpha = 0.62f),
-                                            Color(0xFF33C8F0).copy(alpha = 0.62f)
+                                            Color(0xFF57AEE8).copy(alpha = 0.80f),
+                                            Color(0xFF33C8F0).copy(alpha = 0.80f)
                                         )
                                     ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
@@ -317,8 +317,8 @@ fun UserProfileScreen(
                                 .background(
                                     Brush.horizontalGradient(
                                         listOf(
-                                            Color(0xFF57AEE8).copy(alpha = 0.62f),
-                                            Color(0xFF33C8F0).copy(alpha = 0.62f)
+                                            Color(0xFF57AEE8).copy(alpha = 0.80f),
+                                            Color(0xFF33C8F0).copy(alpha = 0.80f)
                                         )
                                     ),
                                     shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
