@@ -873,7 +873,7 @@ internal fun ProfilePreviewFullPage(
                     name = rows.firstOrNull { !it.fromDisplayName.isNullOrBlank() }?.fromDisplayName
                         ?: historyUsernames[uid]
                         ?: FirebaseUidMapping.shortLabel(uid),
-                    coins = rows.sumOf { it.coins },
+                    coins = rows.sumOf { it.soul },
                     profileImageUrl = userProfilePhotos[uid]
                 )
             }
@@ -1117,28 +1117,17 @@ internal fun ProfilePreviewFullPage(
                         if (friendPreview.isEmpty()) {
                             Text("No friends yet", color = Color(0xFF6B7280), style = MaterialTheme.typography.bodyMedium)
                         } else {
-                            friendPreview.chunked(2).forEach { rowItems ->
+                            friendPreview.take(4).chunked(2).forEach { rowItems ->
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    rowItems.forEachIndexed { index, f ->
-                                        if (friendPreview.size > 2) {
-                                            FriendMiniClassicTile(
-                                                name = f.name,
-                                                profileImageUrl = f.profileImageUrl,
-                                                onClick = { openUserProfileFromDialog(f.uid) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .wrapContentHeight()
-                                            )
-                                        } else {
-                                            FriendMiniTile(
-                                                name = f.name,
-                                                profileImageUrl = f.profileImageUrl,
-                                                onClick = { openUserProfileFromDialog(f.uid) },
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .wrapContentHeight()
-                                            )
-                                        }
+                                    rowItems.forEach { friend ->
+                                        FriendMiniClassicTile(
+                                            name = friend.name,
+                                            profileImageUrl = friend.profileImageUrl,
+                                            onClick = { openUserProfileFromDialog(friend.uid) },
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .wrapContentHeight()
+                                        )
                                     }
                                     if (rowItems.size == 1) {
                                         Spacer(modifier = Modifier.weight(1f))
@@ -1791,7 +1780,7 @@ private fun FriendsShowcaseDialog(
                 item {
 
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(3),
+                            columns = GridCells.Fixed(2),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 220.dp, max = 420.dp)
@@ -1799,46 +1788,15 @@ private fun FriendsShowcaseDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            val tiles = friendPreview.take(6)
-                            if (tiles.isEmpty()) {
-                                item {
-                                    Card(
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF7ED)),
-                                        border = BorderStroke(0.8.dp, Color(0xFFE5E7EB))
-                                    ) {
-                                        Box(
-                                            modifier = Modifier.fillMaxSize().padding(8.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("No friends yet", color = Color(0xFF9CA3AF))
-                                        }
-                                    }
-                                }
-                            } else {
-                                items(tiles.size) { idx ->
-                                    val f = tiles[idx]
-                                    Card(
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (idx % 2 == 0) Color(0xFFF9A8D4) else Color(0xFF93C5FD)
-                                        )
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth().padding(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                                        ) {
-                                            Text("🎁", style = MaterialTheme.typography.headlineSmall)
-                                            SenderAvatarChip(
-                                                profileImageUrl = f.profileImageUrl,
-                                                size = 28.dp,
-                                                onClick = { onUserAvatarClick(f.uid) }
-                                            )
-                                            Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White, fontWeight = FontWeight.SemiBold)
-                                        }
-                                    }
-                                }
+                            val tiles = friendPreview.take(4)
+                            items(tiles.size) { idx ->
+                                val f = tiles[idx]
+                                FriendMiniClassicTile(
+                                    name = f.name,
+                                    profileImageUrl = f.profileImageUrl,
+                                    onClick = { onUserAvatarClick(f.uid) },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                             }
                         }
                     }
@@ -1945,7 +1903,7 @@ private fun ContributorsRankingDialog(
                                 }
                                 Column(horizontalAlignment = Alignment.End) {
                                     Text(item.coins.toString().padStart(4, '0'), color = Color(0xFFBE185D), fontWeight = FontWeight.Bold)
-                                    Text("Coins", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodySmall)
+                                    Text("Souls", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                             HorizontalDivider(color = Color(0xFFE5E7EB))

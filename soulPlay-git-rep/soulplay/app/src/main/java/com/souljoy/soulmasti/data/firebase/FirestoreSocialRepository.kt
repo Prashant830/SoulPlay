@@ -174,6 +174,24 @@ class FirestoreSocialRepository(
         }.mapFailureForUi()
     }
 
+    override suspend fun removeFriend(uid: String): Result<Unit> {
+        val me = auth.currentUser?.uid
+            ?: return Result.failure(IllegalStateException("Not signed in"))
+        if (uid.isBlank() || uid == me) {
+            return Result.failure(IllegalArgumentException("Invalid user"))
+        }
+        return runCatching {
+            val batch = db.batch()
+            batch.delete(db.collection("users").document(me).collection(SUB_FRIENDS).document(uid))
+            batch.delete(db.collection("users").document(uid).collection(SUB_FRIENDS).document(me))
+            // Also clear any stale pending friend requests in either direction.
+            batch.delete(db.collection(COL_FRIEND_REQUESTS).document(friendRequestDocId(me, uid)))
+            batch.delete(db.collection(COL_FRIEND_REQUESTS).document(friendRequestDocId(uid, me)))
+            batch.commit().await()
+            Unit
+        }.mapFailureForUi()
+    }
+
     override fun observeChatMessages(peerUid: String): Flow<List<ChatMessage>> = callbackFlow {
         val me = auth.currentUser?.uid
         if (me.isNullOrBlank() || peerUid.isBlank()) {

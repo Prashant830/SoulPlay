@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,7 +29,11 @@ import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -106,6 +111,7 @@ fun UserProfileScreen(
     var refreshNonce by remember(currentUid) { mutableIntStateOf(0) }
     var isFetching by remember(currentUid) { mutableStateOf(true) }
     var myCoins by remember(myUid) { mutableStateOf<Long?>(null) }
+    var showProfileMenu by remember(currentUid) { mutableStateOf(false) }
 
     val isSelfProfile = myUid != null && currentUid == myUid
     val isFriend = friends.contains(currentUid)
@@ -341,14 +347,53 @@ fun UserProfileScreen(
                     onOpenStats = { showStats = true },
                     contentBottomPadding = 0.dp,
                     onUserAvatarClick = { tappedUid ->
-                        if (tappedUid.isNotBlank() && tappedUid != currentUid) {
+                        if (tappedUid.isNotBlank()) {
                             currentUid = tappedUid
-                            showGiftWall = false
-                            showGiftHistory = false
-                            showStats = false
                         }
+                        showGiftWall = false
+                        showGiftHistory = false
+                        showStats = false
                     },
                 )
+            }
+            if (isFriend) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .statusBarsPadding()
+                        .padding(top = 2.dp, end = 2.dp)
+                ) {
+                    IconButton(onClick = { showProfileMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Filled.MoreVert,
+                            contentDescription = "Profile options",
+                            tint = Color(0xFF4B5563)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = showProfileMenu,
+                        onDismissRequest = { showProfileMenu = false }
+                    ) {
+                        if (isFriend) {
+                            DropdownMenuItem(
+                                text = { Text("Remove Friend") },
+                                onClick = {
+                                    showProfileMenu = false
+                                    scope.launch {
+                                        val result = social.removeFriend(currentUid)
+                                        result.onFailure { relationError = it.message ?: "Could not remove friend" }
+                                        result.onSuccess { outgoingPending = false }
+                                    }
+                                }
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text("No actions") },
+                                onClick = { showProfileMenu = false }
+                            )
+                        }
+                    }
+                }
             }
             val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             if (!showGiftWall && !showGiftHistory && !showStats) {
@@ -480,12 +525,12 @@ fun UserProfileScreen(
                 onOpenHistory = { showGiftHistory = true },
                 onClose = { showGiftWall = false },
                 onUserAvatarClick = { tappedUid ->
-                    if (tappedUid.isNotBlank() && tappedUid != currentUid) {
+                    if (tappedUid.isNotBlank()) {
                         currentUid = tappedUid
-                        showGiftWall = false
-                        showGiftHistory = false
-                        showStats = false
                     }
+                    showGiftWall = false
+                    showGiftHistory = false
+                    showStats = false
                 }
             )
         }
@@ -495,12 +540,12 @@ fun UserProfileScreen(
                 userProfilePhotos = loaded.userProfilePhotos,
                 onClose = { showGiftHistory = false },
                 onUserAvatarClick = { tappedUid ->
-                    if (tappedUid.isNotBlank() && tappedUid != currentUid) {
+                    if (tappedUid.isNotBlank()) {
                         currentUid = tappedUid
-                        showGiftWall = false
-                        showGiftHistory = false
-                        showStats = false
                     }
+                    showGiftWall = false
+                    showGiftHistory = false
+                    showStats = false
                 }
             )
         }
@@ -512,12 +557,12 @@ fun UserProfileScreen(
                 userProfilePhotos = loaded.userProfilePhotos,
                 onClose = { showStats = false },
                 onUserAvatarClick = { tappedUid ->
-                    if (tappedUid.isNotBlank() && tappedUid != currentUid) {
+                    if (tappedUid.isNotBlank()) {
                         currentUid = tappedUid
-                        showGiftWall = false
-                        showGiftHistory = false
-                        showStats = false
                     }
+                    showGiftWall = false
+                    showGiftHistory = false
+                    showStats = false
                 }
             )
         }

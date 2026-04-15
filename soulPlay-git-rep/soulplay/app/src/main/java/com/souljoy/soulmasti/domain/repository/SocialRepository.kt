@@ -21,6 +21,8 @@ interface SocialRepository {
 
     suspend fun declineFriendRequest(fromUid: String): Result<Unit>
 
+    suspend fun removeFriend(uid: String): Result<Unit>
+
     fun observeChatMessages(peerUid: String): Flow<List<ChatMessage>>
 
     suspend fun sendChatMessage(peerUid: String, text: String): Result<Unit>
