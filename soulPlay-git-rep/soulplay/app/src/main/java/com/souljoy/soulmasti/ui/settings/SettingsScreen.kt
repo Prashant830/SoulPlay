@@ -825,7 +825,9 @@ internal fun ProfilePreviewFullPage(
         receivedGiftHistory
             .groupBy { it.giftId ?: "__unknown__" }
             .map { (giftId, rows) ->
-                val senderCounts = rows.groupBy { it.fromUserId ?: "__unknown__" }.mapValues { it.value.size }
+                val senderCounts = rows.groupBy { it.fromUserId ?: "__unknown__" }.mapValues { entry ->
+                    entry.value.sumOf { it.selectedCount.coerceAtLeast(1) }
+                }
                 val topSenderUid = senderCounts.maxByOrNull { it.value }?.key
                 val topSenderCount = senderCounts[topSenderUid] ?: 0
                 val topSenderName = rows.firstOrNull { it.fromUserId == topSenderUid }?.fromDisplayName
@@ -834,7 +836,7 @@ internal fun ProfilePreviewFullPage(
                 GiftWallCardUi(
                     giftId = giftId,
                     label = if (giftId == "__unknown__") "Gift" else GiftCatalog.displayLabel(giftId),
-                    count = rows.size,
+                    count = rows.sumOf { it.selectedCount.coerceAtLeast(1) },
                     coins = rows.sumOf { it.coins },
                     topSenderUid = topSenderUid,
                     topSenderName = topSenderName,
@@ -844,6 +846,9 @@ internal fun ProfilePreviewFullPage(
             }
             .sortedByDescending { it.coins }
             .take(4)
+    }
+    val totalGiftCount = remember(receivedGiftHistory) {
+        receivedGiftHistory.sumOf { it.selectedCount.coerceAtLeast(1) }
     }
     val friendPreview = remember(friendUids, historyUsernames, userProfilePhotos) {
         friendUids
@@ -891,9 +896,10 @@ internal fun ProfilePreviewFullPage(
     var showFriendsDialog by remember { mutableStateOf(false) }
     var showContributorsDialog by remember { mutableStateOf(false) }
     var showSoulLevelDialog by remember { mutableStateOf(false) }
+    var fullscreenProfileImageUrl by remember { mutableStateOf<String?>(null) }
     val openSoulLevelDialog = { showSoulLevelDialog = true }
     val openUserProfileFromDialog: (String) -> Unit = { uid ->
-        if (uid.isNotBlank()) {
+        if (uid.isNotBlank() && isContributorProfileClickable(uid)) {
             // Close current overlays before opening next profile, so new profile is visible immediately.
             showFriendsDialog = false
             showContributorsDialog = false
@@ -941,7 +947,16 @@ internal fun ProfilePreviewFullPage(
                             horizontalArrangement = Arrangement.spacedBy(30.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            SenderAvatarChip(profileImageUrl = profilePictureUrl, size = 130.dp)
+                            SenderAvatarChip(
+                                profileImageUrl = profilePictureUrl,
+                                size = 130.dp,
+                                onClick = {
+                                    profilePictureUrl
+                                        ?.trim()
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?.let { fullscreenProfileImageUrl = it }
+                                }
+                            )
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
@@ -1048,7 +1063,7 @@ internal fun ProfilePreviewFullPage(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Total Gifts ${receivedGiftHistory.size}",
+                                "Total Gifts $totalGiftCount",
                                 color = Color(0xFF6B7280),
                                 style = MaterialTheme.typography.bodySmall
                             )
@@ -1156,7 +1171,11 @@ internal fun ProfilePreviewFullPage(
                                     SenderAvatarChip(
                                         profileImageUrl = g.profileImageUrl,
                                         size = 42.dp,
-                                        onClick = { openUserProfileFromDialog(g.uid) }
+                                        onClick = if (isContributorProfileClickable(g.uid)) {
+                                            { openUserProfileFromDialog(g.uid) }
+                                        } else {
+                                            null
+                                        }
                                     )
                                 }
                                 Icon(
@@ -1227,6 +1246,45 @@ internal fun ProfilePreviewFullPage(
         SoulLevelDialog(
             onClose = { showSoulLevelDialog = false }
         )
+    }
+    fullscreenProfileImageUrl?.let { imageUrl ->
+        FullscreenProfileImageDialog(
+            imageUrl = imageUrl,
+            onClose = { fullscreenProfileImageUrl = null }
+        )
+    }
+}
+
+@Composable
+private fun FullscreenProfileImageDialog(
+    imageUrl: String,
+    onClose: () -> Unit,
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onClose() },
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = "Profile image preview",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                contentScale = ContentScale.Fit,
+                placeholder = painterResource(R.drawable.ic_mascot_hero),
+                error = painterResource(R.drawable.ic_mascot_hero),
+            )
+        }
     }
 }
 
@@ -1877,7 +1935,11 @@ private fun ContributorsRankingDialog(
                                     SenderAvatarChip(
                                         profileImageUrl = item.profileImageUrl,
                                         size = 36.dp,
-                                        onClick = { onUserAvatarClick(item.uid) }
+                                        onClick = if (isContributorProfileClickable(item.uid)) {
+                                            { onUserAvatarClick(item.uid) }
+                                        } else {
+                                            null
+                                        }
                                     )
                                     Text(item.name, style = MaterialTheme.typography.titleMedium)
                                 }
@@ -1921,7 +1983,11 @@ private fun ContributorTopCard(
             SenderAvatarChip(
                 profileImageUrl = item.profileImageUrl,
                 size = if (style == "gold") 62.dp else 54.dp,
-                onClick = { onUserAvatarClick(item.uid) }
+                onClick = if (isContributorProfileClickable(item.uid)) {
+                    { onUserAvatarClick(item.uid) }
+                } else {
+                    null
+                }
             )
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             Text(item.coins.toString().padStart(4, '0'), color = Color(0xFFBE185D), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1941,6 +2007,9 @@ private data class ContributorRankUi(
     val coins: Long,
     val profileImageUrl: String?,
 )
+
+private fun isContributorProfileClickable(uid: String): Boolean =
+    uid.isNotBlank() && !uid.startsWith("dummy_contributor_")
 
 private data class SoulRankTier(
     val minSoul: Long,
@@ -2044,7 +2113,9 @@ internal fun GiftWallShowcaseDialog(
     val grouped = remember(gifts) {
         gifts.groupBy { it.giftId ?: "__unknown__" }
             .map { (giftId, rows) ->
-                val senderCounts = rows.groupBy { it.fromUserId ?: "__unknown__" }.mapValues { it.value.size }
+                val senderCounts = rows.groupBy { it.fromUserId ?: "__unknown__" }.mapValues { entry ->
+                    entry.value.sumOf { it.selectedCount.coerceAtLeast(1) }
+                }
                 val topSenderUid = senderCounts.maxByOrNull { it.value }?.key
                 val topSenderCount = senderCounts[topSenderUid] ?: 0
                 val topSenderName = rows.firstOrNull { it.fromUserId == topSenderUid }?.fromDisplayName
@@ -2054,7 +2125,7 @@ internal fun GiftWallShowcaseDialog(
                 GiftWallCardUi(
                     giftId = giftId,
                     label = if (giftId == "__unknown__") "Gift" else GiftCatalog.displayLabel(giftId),
-                    count = rows.size,
+                    count = rows.sumOf { it.selectedCount.coerceAtLeast(1) },
                     coins = rows.sumOf { it.coins },
                     topSenderUid = topSenderUid,
                     topSenderName = topSenderName,
@@ -2096,7 +2167,7 @@ internal fun GiftWallShowcaseDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("${gifts.size} Gift received", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("${gifts.sumOf { it.selectedCount.coerceAtLeast(1) }} Gift received", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("${gifts.sumOf { it.coins }} coin got", color = Color.White, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -2501,7 +2572,21 @@ internal fun GiftHistoryListDialog(
                                         }
                                     }
                                 }
-                                Text("🪙 ${g.coins}", color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("🪙 ${g.coins}", color = Color(0xFFFBBF24), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Image(
+                                            painter = painterResource(R.drawable.ic_soul_cute_ghost),
+                                            contentDescription = "Soul",
+                                            modifier = Modifier.size(14.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                        Text("+${g.soul}", color = Color(0xFFC4B5FD), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                     }
@@ -2907,7 +2992,7 @@ private fun buildTopGiftBreakdown(history: List<ReceivedGiftSummary>): List<Gift
         .map { (giftId, items) ->
             GiftBreakdownStat(
                 label = if (giftId == "__unknown__") "Gift" else GiftCatalog.displayLabel(giftId),
-                count = items.size,
+                count = items.sumOf { it.selectedCount.coerceAtLeast(1) },
                 coins = items.sumOf { it.coins }
             )
         }

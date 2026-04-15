@@ -105,6 +105,7 @@ fun UserProfileScreen(
     var relationError by remember { mutableStateOf<String?>(null) }
     var refreshNonce by remember(currentUid) { mutableIntStateOf(0) }
     var isFetching by remember(currentUid) { mutableStateOf(true) }
+    var myCoins by remember(myUid) { mutableStateOf<Long?>(null) }
 
     val isSelfProfile = myUid != null && currentUid == myUid
     val isFriend = friends.contains(currentUid)
@@ -122,6 +123,29 @@ fun UserProfileScreen(
                     .await()
                     .let { it.exists() && it.getString("status") == "pending" }
             }.getOrDefault(false)
+        }
+    }
+    LaunchedEffect(myUid, showSendGiftPicker) {
+        if (!showSendGiftPicker) return@LaunchedEffect
+        val senderUid = myUid ?: return@LaunchedEffect
+        val value = runCatching {
+            FirebaseDatabase.getInstance()
+                .reference
+                .child("users")
+                .child(senderUid)
+                .child("totalWinnings")
+                .get()
+                .await()
+                .value
+        }.getOrNull()
+        myCoins = when (value) {
+            is Long -> value
+            is Int -> value.toLong()
+            is Double -> value.toLong()
+            is Float -> value.toLong()
+            is String -> value.trim().toLongOrNull()
+            is Number -> value.toLong()
+            else -> myCoins
         }
     }
 
@@ -181,6 +205,12 @@ fun UserProfileScreen(
         val giftSnap = runCatching { db.child("users").child(currentUid).child("giftsReceived").get().await() }.getOrNull()
         val gifts = giftSnap?.children?.mapNotNull { child ->
             val coins = child.child("coins").getValue(Long::class.java) ?: return@mapNotNull null
+            val soul = child.child("soul").getValue(Long::class.java)
+                ?: child.child("receiverSoul").getValue(Long::class.java)
+                ?: 0L
+            val selectedCount = child.child("selectedCount").getValue(Int::class.java)
+                ?: child.child("selectedCount").getValue(Long::class.java)?.toInt()
+                ?: 1
             val fromUserId = child.child("fromUserId").getValue(String::class.java)
             val fromDisplayName = fromUserId?.let { senderUid ->
                 senderNames[senderUid] ?: run {
@@ -195,6 +225,8 @@ fun UserProfileScreen(
                 fromDisplayName = fromDisplayName,
                 giftId = child.child("giftId").getValue(String::class.java),
                 coins = coins,
+                soul = soul,
+                selectedCount = selectedCount.coerceAtLeast(1),
                 createdAt = child.child("createdAt").getValue(Long::class.java) ?: 0L,
             )
         }?.sortedByDescending { it.createdAt } ?: emptyList()
@@ -492,6 +524,7 @@ fun UserProfileScreen(
         GiftWallDialog(
             visible = showSendGiftPicker,
             recipientDisplayName = loaded.username,
+            availableCoins = myCoins,
             items = remember { defaultGiftWallItems() },
             sending = giftSending,
             errorMessage = relationError,
@@ -499,7 +532,7 @@ fun UserProfileScreen(
                 showSendGiftPicker = false
                 relationError = null
             },
-            onSend = { giftId ->
+            onSend = { giftId, selectedCount ->
                 scope.launch {
                     giftSending = true
                     relationError = null
@@ -513,13 +546,15 @@ fun UserProfileScreen(
                     val sendResult = giftsRepo.sendGift(
                         context = GiftSendContext.Chat(chatId),
                         giftId = giftId,
-                        recipientUserId = currentUid
+                        recipientUserId = currentUid,
+                        selectedCount = selectedCount,
                     )
                     sendResult
                         .onSuccess { r ->
                             val giftLabel = GiftCatalog.displayLabel(giftId)
-                            val giftCoins = GiftCatalog.priceCoinsOrNull(giftId)?.toLong() ?: 0L
-                            val giftMsg = "GIFT|$giftId|$giftLabel|$giftCoins|${r.receiverCoins}"
+                            val unitCoins = GiftCatalog.priceCoinsOrNull(giftId)?.toLong() ?: 0L
+                            val giftCoins = unitCoins * selectedCount.toLong()
+                            val giftMsg = "GIFT|$giftId|$giftLabel|$giftCoins|${r.receiverCoins}|${r.receiverSoul}|$selectedCount"
                             social.sendChatMessage(currentUid, giftMsg)
                             giftCelebration.enqueueIfFx(context, giftId)
                             showSendGiftPicker = false

@@ -79,17 +79,22 @@ fun defaultGiftWallItems(): List<GiftWallItem> = listOf(
 fun GiftWallDialog(
     visible: Boolean,
     recipientDisplayName: String,
+    availableCoins: Long? = null,
     items: List<GiftWallItem>,
     sending: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
-    onSend: (giftId: String) -> Unit,
+    onSend: (giftId: String, selectedCount: Int) -> Unit,
 ) {
     if (!visible) return
     val configuration = LocalConfiguration.current
     val sheetMaxHeight = (configuration.screenHeightDp * 0.88f).dp
     val scrollAreaMaxHeight = (configuration.screenHeightDp * 0.52f).dp.coerceAtLeast(220.dp)
     var selectedGiftId by remember(visible, items) { mutableStateOf(items.firstOrNull()?.id) }
+    var selectedCount by remember(visible) { mutableStateOf(1) }
+    val comboOptions = remember { listOf(1, 5, 10, 20, 50) }
+    val selectedGift = items.firstOrNull { it.id == selectedGiftId }
+    val totalCoins = (selectedGift?.priceCoins ?: 0L) * selectedCount.toLong()
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -137,6 +142,30 @@ fun GiftWallDialog(
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    availableCoins?.let { coins ->
+                                        Text(
+                                            text = "You have: $coins coins",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF0F766E),
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (selectedGift == null) "Total: 0 coins" else "Total: $totalCoins coins",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF475569),
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(16.dp))
@@ -179,6 +208,38 @@ fun GiftWallDialog(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Combo",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F172A)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp),
+                        ) {
+                            items(comboOptions) { combo ->
+                                val selected = combo == selectedCount
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = if (selected) Color(0xFFFCE7F3) else Color.White,
+                                    tonalElevation = 1.dp,
+                                    shadowElevation = if (selected) 3.dp else 1.dp,
+                                    modifier = Modifier.clickable(enabled = !sending) { selectedCount = combo }
+                                ) {
+                                    Text(
+                                        text = "x$combo",
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (selected) Color(0xFF9D174D) else Color(0xFF334155)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(10.dp))
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
@@ -212,7 +273,7 @@ fun GiftWallDialog(
                                 }
                                 Button(
                                     onClick = {
-                                        selectedGiftId?.let(onSend)
+                                        selectedGiftId?.let { onSend(it, selectedCount) }
                                     },
                                     enabled = selectedGiftId != null,
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEC4899)),
@@ -221,7 +282,11 @@ fun GiftWallDialog(
                                 ) {
                                     val selected = items.firstOrNull { it.id == selectedGiftId }
                                     Text(
-                                        text = if (selected == null) "Send gift" else "Send ${selected.label}",
+                                        text = if (selected == null) {
+                                            "Send gift"
+                                        } else {
+                                            "Send ${selected.label} x$selectedCount"
+                                        },
                                         color = Color.White,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,

@@ -31,12 +31,15 @@ class FirebaseGiftRepository(
         context: GiftSendContext,
         giftId: String,
         recipientUserId: String?,
+        selectedCount: Int,
     ): Result<GiftSendResult> {
         val uid = auth.currentUser?.uid
             ?: return Result.failure(IllegalStateException("Not signed in"))
 
-        val price = resolvePriceCoins(giftId)
+        val unitPrice = resolvePriceCoins(giftId)
             ?: return Result.failure(IllegalArgumentException("Unknown gift: $giftId"))
+        val safeSelectedCount = selectedCount.coerceAtLeast(1)
+        val totalPrice = unitPrice * safeSelectedCount.toLong()
 
         val balanceRef = database.reference.child("users").child(uid).child("totalWinnings")
         val eventsRef = database.reference
@@ -45,10 +48,15 @@ class FirebaseGiftRepository(
             .child(context.scopeId)
 
         return runCatching {
-            val newBalance = deductCoins(balanceRef, price)
+            val newBalance = deductCoins(balanceRef, totalPrice)
 
             val receiverCoins = if (!recipientUserId.isNullOrBlank()) {
-                computeRandomPortion(max = price)
+                computeRandomPortion(max = totalPrice)
+            } else {
+                0L
+            }
+            val receiverSoul = if (!recipientUserId.isNullOrBlank()) {
+                computeSoulReward(totalPrice)
             } else {
                 0L
             }
@@ -59,6 +67,8 @@ class FirebaseGiftRepository(
                     fromUserId = uid,
                     giftId = giftId,
                     coins = receiverCoins,
+                    soul = receiverSoul,
+                    selectedCount = safeSelectedCount,
                 )
             }
 
@@ -67,8 +77,10 @@ class FirebaseGiftRepository(
             val payload = mutableMapOf<String, Any?>(
                 "fromUserId" to uid,
                 "giftId" to giftId,
-                "coins" to price,
+                "selectedCount" to safeSelectedCount,
+                "coins" to totalPrice,
                 "receiverCoins" to receiverCoins,
+                "receiverSoul" to receiverSoul,
                 "createdAt" to ServerValue.TIMESTAMP,
             )
             if (!recipientUserId.isNullOrBlank()) {
@@ -77,13 +89,15 @@ class FirebaseGiftRepository(
             try {
                 newEventRef.setValue(payload).await()
             } catch (e: Exception) {
-                addCoins(balanceRef, price)
+                addCoins(balanceRef, totalPrice)
                 throw e
             }
             GiftSendResult(
                 newBalance = newBalance,
                 eventId = eventId,
                 receiverCoins = receiverCoins,
+                receiverSoul = receiverSoul,
+                selectedCount = safeSelectedCount,
             )
         }
     }
@@ -100,21 +114,26 @@ class FirebaseGiftRepository(
     }
 
     /**
-     * Random reward helper:
-     * from max picks one of [1, max/10, max/5, max/2, max] (deduped), so you get small, medium and sometimes full values.
+     * Random reward helper tuned to reduce predictable values:
+     * - For gifts above 15k total, receiver always gets at least 5k, plus random from the remaining range.
+     * - Otherwise, receiver gets a fully random amount in [1, max].
      */
     private fun computeRandomPortion(max: Long): Long {
         if (max <= 0L) return 0L
         val base = max.coerceAtLeast(1L)
-        val candidates = listOf(
-            1L,
-            (base / 10L).coerceAtLeast(1L),
-            (base / 5L).coerceAtLeast(1L),
-            (base / 2L).coerceAtLeast(1L),
-            base,
-        ).distinct()
-        val idx = ThreadLocalRandom.current().nextInt(candidates.size)
-        return candidates[idx]
+        val random = ThreadLocalRandom.current()
+        return if (base > 15_000L) {
+            val floor = 5_000L
+            val remainder = (base - floor).coerceAtLeast(0L)
+            if (remainder == 0L) floor else floor + random.nextLong(remainder + 1L)
+        } else {
+            random.nextLong(base) + 1L
+        }
+    }
+
+    private fun computeSoulReward(giftGoldValue: Long): Long {
+        if (giftGoldValue <= 0L) return 0L
+        return giftGoldValue / 10L
     }
 
     /** Coins is the *rewarded* amount for receiver (already randomized). */
@@ -123,11 +142,14 @@ class FirebaseGiftRepository(
         fromUserId: String,
         giftId: String,
         coins: Long,
+        soul: Long,
+        selectedCount: Int,
     ) {
         val userRef = database.reference.child("users").child(recipientUid)
         val coinsRef = userRef.child("giftReceivedCoins")
         val countRef = userRef.child("giftReceivedCount")
         val winningsRef = userRef.child("totalWinnings")
+        val soulRef = userRef.child("soul")
 
         // Aggregate total coins from gifts for profile.
         suspendCancellableCoroutine<Unit> { cont ->
@@ -157,7 +179,7 @@ class FirebaseGiftRepository(
             countRef.runTransaction(object : Transaction.Handler {
                 override fun doTransaction(currentData: MutableData): Transaction.Result {
                     val v = parseLong(currentData.value) ?: 0L
-                    currentData.value = v + 1L
+                    currentData.value = v + selectedCount.toLong()
                     return Transaction.success(currentData)
                 }
 
@@ -173,11 +195,16 @@ class FirebaseGiftRepository(
 
         // Also credit rewarded coins into receiver's total winnings.
         addCoins(winningsRef, coins)
+        if (soul > 0L) {
+            addCoins(soulRef, soul)
+        }
         // Append a history row under users/{uid}/giftsReceived for profile gift wall.
         val historyRef = userRef.child("giftsReceived").push()
         val now = System.currentTimeMillis()
         val historyPayload = mapOf(
             "coins" to coins,
+            "soul" to soul,
+            "selectedCount" to selectedCount,
             "createdAt" to now,
             "fromUserId" to fromUserId,
             "giftId" to giftId,
@@ -267,18 +294,22 @@ class FirebaseGiftRepository(
         val id = snapshot.key ?: return null
         val from = snapshot.child("fromUserId").getValue(String::class.java) ?: return null
         val giftId = snapshot.child("giftId").getValue(String::class.java) ?: return null
+        val selectedCount = parseLong(snapshot.child("selectedCount").value)?.toInt()?.coerceAtLeast(1) ?: 1
         val coins = parseLong(snapshot.child("coins").value) ?: return null
         val to = snapshot.child("toUserId").getValue(String::class.java)?.takeIf { it.isNotBlank() }
         val createdAt = parseLong(snapshot.child("createdAt").value)
         val receiverCoins = parseLong(snapshot.child("receiverCoins").value) ?: 0L
+        val receiverSoul = parseLong(snapshot.child("receiverSoul").value) ?: 0L
         return GiftEvent(
             eventId = id,
             context = context,
             fromUserId = from,
             toUserId = to,
             giftId = giftId,
+            selectedCount = selectedCount,
             coins = coins,
             receiverCoins = receiverCoins,
+            receiverSoul = receiverSoul,
             createdAt = createdAt,
         )
     }

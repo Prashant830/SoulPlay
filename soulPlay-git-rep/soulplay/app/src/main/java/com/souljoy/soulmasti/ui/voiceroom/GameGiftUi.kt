@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,9 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.souljoy.soulmasti.R
 import com.souljoy.soulmasti.ui.common.gift.GiftWallDialog as CommonGiftWallDialog
 import com.souljoy.soulmasti.ui.common.gift.GiftWallItem as CommonGiftWallItem
 import com.souljoy.soulmasti.ui.common.gift.defaultGiftWallItems as commonDefaultGiftWallItems
@@ -44,12 +47,15 @@ data class GiftBannerUi(
     /** Raw [GiftCatalog] id for Lottie / celebration. */
     val giftId: String,
     val senderDisplay: String,
+    val isSentByMe: Boolean,
     val giftDisplayName: String,
+    val selectedCount: Int,
     val recipientDisplay: String?,
     val coins: Long,
     val receiverCoins: Long,
+    val receiverSoul: Long,
 ) {
-    val titleLine: String get() = "$senderDisplay sent $giftDisplayName"
+    val titleLine: String get() = if (isSentByMe) "You sent $giftDisplayName x$selectedCount" else "$senderDisplay sent $giftDisplayName x$selectedCount"
     val subtitleLine: String get() = recipientDisplay?.let { "To $it" } ?: ""
 }
 
@@ -127,12 +133,29 @@ fun GiftBannerOverlay(
                         if (revealed) {
                             if (b.receiverCoins > 0L && !b.recipientDisplay.isNullOrBlank()) {
                                 Text(
-                                    text = "🪙 +${b.receiverCoins} gold to ${b.recipientDisplay}",
+                                    text = "🪙 +${b.receiverCoins} coins to ${b.recipientDisplay}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.Medium,
                                     color = Color(0xFF16A34A),
                                     textAlign = TextAlign.End
                                 )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_soul_cute_ghost),
+                                        contentDescription = "Soul",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "+${b.receiverSoul} soul to ${b.recipientDisplay}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF7C3AED),
+                                        textAlign = TextAlign.End
+                                    )
+                                }
                                 Text(
                                     text = "Tap profile → Gift wall to see all gifts",
                                     style = MaterialTheme.typography.labelSmall,
@@ -171,14 +194,16 @@ fun GiftBannerOverlay(
 fun GiftWallDialog(
     visible: Boolean,
     recipientDisplayName: String,
+    availableCoins: Long? = null,
     items: List<GiftWallItem>,
     sending: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
-    onSend: (giftId: String) -> Unit,
+    onSend: (giftId: String, selectedCount: Int) -> Unit,
 ) = CommonGiftWallDialog(
     visible = visible,
     recipientDisplayName = recipientDisplayName,
+    availableCoins = availableCoins,
     items = items,
     sending = sending,
     errorMessage = errorMessage,

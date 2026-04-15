@@ -118,9 +118,15 @@ class SettingsViewModel(
         val senderPhotos = _userProfilePhotos.value.toMutableMap()
         for (child in snap.children) {
             val coins = child.child("coins").getValue(Long::class.java) ?: continue
+            val soul = child.child("soul").getValue(Long::class.java)
+                ?: child.child("receiverSoul").getValue(Long::class.java)
+                ?: 0L
             val createdAt = child.child("createdAt").getValue(Long::class.java) ?: 0L
             val fromUserId = child.child("fromUserId").getValue(String::class.java)
             val giftId = child.child("giftId").getValue(String::class.java)
+            val selectedCount = child.child("selectedCount").getValue(Int::class.java)
+                ?: child.child("selectedCount").getValue(Long::class.java)?.toInt()
+                ?: 1
             val fromName = fromUserId?.let { uidSender ->
                 senderNames[uidSender] ?: run {
                     val userSnap = runCatching {
@@ -145,6 +151,8 @@ class SettingsViewModel(
                     fromDisplayName = fromName,
                     giftId = giftId,
                     coins = coins,
+                    soul = soul,
+                    selectedCount = selectedCount.coerceAtLeast(1),
                     createdAt = createdAt,
                 )
             )
@@ -257,5 +265,7 @@ data class ReceivedGiftSummary(
     val fromDisplayName: String?,
     val giftId: String?,
     val coins: Long,
+    val soul: Long = 0L,
+    val selectedCount: Int = 1,
     val createdAt: Long,
 )

@@ -9,8 +9,11 @@ data class GiftEvent(
     val fromUserId: String,
     val toUserId: String?,
     val giftId: String,
+    val selectedCount: Int,
     val coins: Long,
     /** Coins actually awarded to the receiver (randomized portion of [coins]). */
     val receiverCoins: Long,
+    /** Soul awarded to receiver, derived from gift value (10 gold = 1 soul). */
+    val receiverSoul: Long,
     val createdAt: Long?,
 )

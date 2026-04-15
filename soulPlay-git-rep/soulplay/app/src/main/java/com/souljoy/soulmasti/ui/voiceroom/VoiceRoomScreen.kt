@@ -540,6 +540,7 @@ fun VoiceRoomScreen(
         GiftWallDialog(
             visible = giftRecipientUid != null,
             recipientDisplayName = giftRecipientLabel.ifBlank { stringResource(R.string.gift_recipient_fallback) },
+            availableCoins = coinBalance,
             items = remember { defaultGiftWallItems() },
             sending = giftSending,
             errorMessage = giftError,
@@ -547,12 +548,12 @@ fun VoiceRoomScreen(
                 giftRecipientUid = null
                 giftError = null
             },
-            onSend = { giftId ->
+            onSend = { giftId, selectedCount ->
                 val toUid = giftRecipientUid ?: return@GiftWallDialog
                 giftSending = true
                 giftError = null
                 giftScope.launch {
-                    val r = viewModel.sendGift(toUid, giftId)
+                    val r = viewModel.sendGift(toUid, giftId, selectedCount)
                     giftSending = false
                     r.onSuccess {
                         giftRecipientUid = null

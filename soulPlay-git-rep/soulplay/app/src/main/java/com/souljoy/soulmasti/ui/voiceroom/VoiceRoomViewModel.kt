@@ -86,10 +86,13 @@ class VoiceRoomViewModel(
                         eventId = event.eventId,
                         giftId = event.giftId,
                         senderDisplay = senderDisplay,
+                        isSentByMe = event.fromUserId == game.firebaseUid.value,
                         giftDisplayName = GiftCatalog.displayLabel(event.giftId),
+                        selectedCount = event.selectedCount,
                         recipientDisplay = recipientDisplay,
                         coins = event.coins,
                         receiverCoins = event.receiverCoins,
+                        receiverSoul = event.receiverSoul,
                     )
                 )
             }
@@ -122,11 +125,12 @@ class VoiceRoomViewModel(
         _userProfiles.value = known + loaded
     }
 
-    suspend fun sendGift(recipientUid: String, giftId: String): Result<GiftSendResult> {
+    suspend fun sendGift(recipientUid: String, giftId: String, selectedCount: Int): Result<GiftSendResult> {
         return giftRepository.sendGift(
             GiftSendContext.RajaRaniGame(roomId),
             giftId,
             recipientUid,
+            selectedCount = selectedCount,
         )
     }
 

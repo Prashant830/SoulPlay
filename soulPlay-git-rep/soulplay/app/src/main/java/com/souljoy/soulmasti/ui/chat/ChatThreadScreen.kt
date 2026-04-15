@@ -1,6 +1,7 @@
 package com.souljoy.soulmasti.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -33,8 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -51,6 +55,10 @@ private val BubbleMeBlue = Color(0xFF2563EB)
 private val BubbleMeOnBlue = Color(0xFFFFFFFF)
 private val BubbleOtherGray = Color(0xFFE2E8F0)
 private val BubbleOtherOnGray = Color(0xFF0F172A)
+private val GiftMineStart = Color(0xFF2563EB)
+private val GiftMineEnd = Color(0xFF9333EA)
+private val GiftOtherStart = Color(0xFFF8FAFC)
+private val GiftOtherEnd = Color(0xFFE2E8F0)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +71,7 @@ fun ChatThreadScreen(
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val peerName by viewModel.peerDisplayName.collectAsStateWithLifecycle()
     val peerPhotoUrl by viewModel.peerPhotoUrl.collectAsStateWithLifecycle()
+    val myCoins by viewModel.myCoins.collectAsStateWithLifecycle()
     val sendError by viewModel.sendError.collectAsStateWithLifecycle()
     val myUid = viewModel.myUid
     val listState = rememberLazyListState()
@@ -242,6 +251,7 @@ fun ChatThreadScreen(
     GiftWallDialog(
         visible = showGiftDialog,
         recipientDisplayName = peerName,
+        availableCoins = myCoins,
         items = remember { defaultGiftWallItems() },
         sending = giftSending,
         errorMessage = giftError,
@@ -249,11 +259,11 @@ fun ChatThreadScreen(
             showGiftDialog = false
             giftError = null
         },
-        onSend = { giftId ->
+        onSend = { giftId, selectedCount ->
             giftSending = true
             giftError = null
             scope.launch {
-                val result = viewModel.sendGift(giftId)
+                val result = viewModel.sendGift(giftId, selectedCount)
                 giftSending = false
                 result.onSuccess {
                     showGiftDialog = false
@@ -273,41 +283,80 @@ private fun GiftMessageBubble(
     info: GiftChatPayload,
     modifier: Modifier = Modifier,
 ) {
+    val bubbleTextColor = if (mine) Color.White else Color(0xFF0F172A)
+    val bubbleSubTextColor = if (mine) Color(0xFFE0E7FF) else Color(0xFF334155)
+    val giftShape = RoundedCornerShape(
+        topStart = 18.dp,
+        topEnd = 18.dp,
+        bottomStart = if (mine) 6.dp else 18.dp,
+        bottomEnd = if (mine) 18.dp else 6.dp
+    )
     Column(
         modifier = modifier
             .background(
-                color = if (mine) BubbleMeBlue else BubbleOtherGray,
-                shape = RoundedCornerShape(
-                    topStart = 16.dp,
-                    topEnd = 16.dp,
-                    bottomStart = if (mine) 4.dp else 16.dp,
-                    bottomEnd = if (mine) 16.dp else 4.dp
-                )
+                brush = if (mine) {
+                    Brush.linearGradient(listOf(GiftMineStart, GiftMineEnd))
+                } else {
+                    Brush.linearGradient(listOf(GiftOtherStart, GiftOtherEnd))
+                },
+                shape = giftShape
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = if (mine) "🎁 Sent gift" else "🎉 Gift received",
+                style = MaterialTheme.typography.labelSmall,
+                color = bubbleSubTextColor
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(
                 imageVector = Icons.Filled.CardGiftcard,
                 contentDescription = null,
-                tint = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
+                tint = bubbleTextColor
             )
             Text(
-                text = stringResource(R.string.chat_gift_title, info.giftLabel),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
+                text = "${info.giftLabel} x${info.selectedCount}",
+                style = MaterialTheme.typography.titleSmall,
+                color = bubbleTextColor
             )
         }
         Text(
-            text = stringResource(R.string.chat_gift_coins_sent, info.giftCoins),
+            text = "Gift value: ${info.giftCoins} coins",
             style = MaterialTheme.typography.bodySmall,
-            color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
+            color = bubbleSubTextColor
         )
         Text(
-            text = stringResource(R.string.chat_gift_receiver_coins, info.receiverCoins),
+            text = if (mine) {
+                "💰 Receiver gets: +${info.receiverCoins} coins"
+            } else {
+                "💰 You received: +${info.receiverCoins} coins"
+            },
             style = MaterialTheme.typography.bodySmall,
-            color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
+            color = bubbleSubTextColor
         )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.ic_soul_cute_ghost),
+                contentDescription = "Soul",
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(16.dp),
+            )
+            Text(
+                text = if (mine) {
+                    "Receiver gets: +${info.receiverSoul} soul"
+                } else {
+                    "You received: +${info.receiverSoul} soul"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = bubbleSubTextColor
+            )
+        }
     }
 }

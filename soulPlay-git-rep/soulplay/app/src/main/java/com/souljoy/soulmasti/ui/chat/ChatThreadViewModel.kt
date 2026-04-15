@@ -45,6 +45,8 @@ class ChatThreadViewModel(
 
     private val _sendError = MutableStateFlow<String?>(null)
     val sendError: StateFlow<String?> = _sendError.asStateFlow()
+    private val _myCoins = MutableStateFlow<Long?>(null)
+    val myCoins: StateFlow<Long?> = _myCoins.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -58,6 +60,11 @@ class ChatThreadViewModel(
         }
         viewModelScope.launch {
             social.markChatAsRead(peerUid)
+        }
+        viewModelScope.launch {
+            val uid = auth.currentUser?.uid ?: return@launch
+            val snap = runCatching { database.reference.child("users").child(uid).child("totalWinnings").get().await() }.getOrNull()
+            _myCoins.value = parseLong(snap?.value) ?: 0L
         }
     }
 
@@ -73,23 +80,28 @@ class ChatThreadViewModel(
         }
     }
 
-    suspend fun sendGift(giftId: String): Result<Unit> {
+    suspend fun sendGift(giftId: String, selectedCount: Int): Result<Unit> {
         val me = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
         val chatId = directChatId(me, peerUid)
         val giftLabel = GiftCatalog.displayLabel(giftId)
+        val safeSelectedCount = selectedCount.coerceAtLeast(1)
         val giftResult = gifts.sendGift(
             context = GiftSendContext.Chat(chatId),
             giftId = giftId,
-            recipientUserId = peerUid
+            recipientUserId = peerUid,
+            selectedCount = safeSelectedCount,
         )
         if (giftResult.isFailure) return Result.failure(giftResult.exceptionOrNull() ?: IllegalStateException("Gift failed"))
 
         val receiverCoins = giftResult.getOrNull()?.receiverCoins ?: 0L
+        val receiverSoul = giftResult.getOrNull()?.receiverSoul ?: 0L
         val text = buildGiftMessageText(
             giftId = giftId,
             giftLabel = giftLabel,
-            giftCoins = GiftCatalog.priceCoinsOrNull(giftId) ?: 0L,
+            giftCoins = (GiftCatalog.priceCoinsOrNull(giftId) ?: 0L) * safeSelectedCount.toLong(),
             receiverCoins = receiverCoins,
+            receiverSoul = receiverSoul,
+            selectedCount = safeSelectedCount,
         )
         val msgResult = social.sendChatMessage(peerUid, text)
         if (msgResult.isFailure) {
@@ -97,6 +109,17 @@ class ChatThreadViewModel(
         }
         return Result.success(Unit)
     }
+}
+
+private fun parseLong(value: Any?): Long? {
+    if (value == null) return null
+    if (value is String) return value.trim().toLongOrNull()
+    if (value is Long) return value
+    if (value is Int) return value.toLong()
+    if (value is Double) return value.toLong()
+    if (value is Float) return value.toLong()
+    if (value is Number) return value.toLong()
+    return null
 }
 
 private fun directChatId(a: String, b: String): String {
@@ -109,4 +132,6 @@ private fun buildGiftMessageText(
     giftLabel: String,
     giftCoins: Long,
     receiverCoins: Long,
-): String = "GIFT|$giftId|$giftLabel|$giftCoins|$receiverCoins"
+    receiverSoul: Long,
+    selectedCount: Int,
+): String = "GIFT|$giftId|$giftLabel|$giftCoins|$receiverCoins|$receiverSoul|$selectedCount"

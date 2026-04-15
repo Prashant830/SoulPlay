@@ -8,6 +8,8 @@ data class GiftSendResult(
     val newBalance: Long,
     val eventId: String,
     val receiverCoins: Long = 0L,
+    val receiverSoul: Long = 0L,
+    val selectedCount: Int = 1,
 )
 
 /**
@@ -20,6 +22,7 @@ interface GiftRepository {
         context: GiftSendContext,
         giftId: String,
         recipientUserId: String?,
+        selectedCount: Int = 1,
     ): Result<GiftSendResult>
 
     /** New gifts only (child added), for animations / toasts. */
