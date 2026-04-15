@@ -88,6 +88,7 @@
     <string name="settings_language">Language</string>
     <string name="settings_region">Region</string>
     <string name="settings_signature">Signature</string>
+    <string name="settings_soul_level">Soul Levels</string>
     <string name="settings_security_center">Security Center</string>
     <string name="settings_invite_friends">Invite Friends</string>
     <string name="settings_logout">Logout</string>
@@ -100,6 +101,7 @@
     <string name="settings_logout_confirm_message">Do you want to logout?</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
+    <string name="ok">OK</string>
     <string name="profile_default_name">Player</string>
 
     <!-- Edit profile -->
@@ -117,6 +119,15 @@
     <string name="signature_default">🙂</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
+    <string name="soul_levels_tab">Soul Levels</string>
+    <string name="active_levels_tab">Active Levels</string>
+    <string name="how_to_increase_soul">Soul Increase Rule</string>
+    <string name="level">Level</string>
+    <string name="receive_gifts">Receive Gifts</string>
+    <string name="soul_hint_line">10 coins worth of gift = 1 Soul</string>
+    <string name="soul_column">Soul</string>
+    <string name="icon_column">Icon</string>
+    <string name="active_levels_coming_soon">Active levels coming soon</string>
 
     <!-- Gift wall / history -->
     <string name="gift_title_plain">Gift</string>

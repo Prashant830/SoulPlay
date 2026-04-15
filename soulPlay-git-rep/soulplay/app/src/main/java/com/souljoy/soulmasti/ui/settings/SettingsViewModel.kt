@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.storage.FirebaseStorage
 import com.souljoy.soulmasti.data.firebase.ProfilePhotoStorage
@@ -53,6 +54,8 @@ class SettingsViewModel(
     val gender: StateFlow<String?> = _gender
     private val _signature = MutableStateFlow<String?>(null)
     val signature: StateFlow<String?> = _signature
+    private val _soul = MutableStateFlow<Long?>(null)
+    val soul: StateFlow<Long?> = _soul
 
     private val _historyUsernames = MutableStateFlow<Map<String, String>>(emptyMap())
     val historyUsernames: StateFlow<Map<String, String>> = _historyUsernames
@@ -104,6 +107,7 @@ class SettingsViewModel(
                     ?.takeIf { it.isNotBlank() }
         _giftReceivedCoins.value = snap.child("giftReceivedCoins").getValue(Long::class.java)
         _giftReceivedCount.value = snap.child("giftReceivedCount").getValue(Long::class.java)
+        _soul.value = readLongFromSchema(snap, "soul", "soulValue", "charms")
     }
 
     private suspend fun loadReceivedGifts() {
@@ -235,6 +239,17 @@ class SettingsViewModel(
     fun logout() {
         auth.signOut()
     }
+}
+
+private fun readLongFromSchema(snap: DataSnapshot, vararg keys: String): Long? {
+    for (key in keys) {
+        val child = snap.child(key)
+        child.getValue(Long::class.java)?.let { return it }
+        child.getValue(Int::class.java)?.toLong()?.let { return it }
+        child.getValue(Double::class.java)?.toLong()?.let { return it }
+        child.getValue(String::class.java)?.trim()?.toLongOrNull()?.let { return it }
+    }
+    return null
 }
 
 data class ReceivedGiftSummary(

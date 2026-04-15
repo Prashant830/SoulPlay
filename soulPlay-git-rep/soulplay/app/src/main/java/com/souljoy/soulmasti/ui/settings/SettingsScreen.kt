@@ -111,6 +111,7 @@ import com.souljoy.soulmasti.domain.model.MatchOutcome
 import com.souljoy.soulmasti.domain.repository.SocialRepository
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -153,6 +154,7 @@ fun SettingsScreen(
     var showStatsDialog by remember { mutableStateOf(false) }
     var showNicknameEditor by remember { mutableStateOf(false) }
     var showSignatureEditor by remember { mutableStateOf(false) }
+    var showSoulLevelDialog by remember { mutableStateOf(false) }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
@@ -248,10 +250,10 @@ fun SettingsScreen(
                 shape = RoundedCornerShape(0.dp)
             ) {
                 SettingsNavRow(
-                    stringResource(R.string.settings_signature),
-                    signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
-                    leftIcon = Icons.Outlined.Signpost
-                ) { showSignatureEditor = true }
+                    stringResource(R.string.settings_soul_level),
+                    "",
+                    leftIcon = Icons.Outlined.Leaderboard
+                ) { showSoulLevelDialog = true }
                 SettingsNavRow(stringResource(R.string.settings_security_center), "", leftIcon = Icons.Outlined.Security) {
                     Toast.makeText(context, securityCenterToastText, Toast.LENGTH_LONG).show()
                 }
@@ -511,6 +513,11 @@ fun SettingsScreen(
             }
         )
     }
+    if (showSoulLevelDialog) {
+        SoulLevelDialog(
+            onClose = { showSoulLevelDialog = false }
+        )
+    }
 }
 
 @Composable
@@ -529,6 +536,250 @@ private fun ShortcutRow(
         ShortcutItem("Shop", Icons.Outlined.Shop, onShopClick)
         ShortcutItem("Stats", Icons.Outlined.Leaderboard, onStatsClick)
         ShortcutItem("Gift Wall", Icons.Outlined.EmojiEvents, onGiftClick)
+    }
+}
+
+@Composable
+private fun SoulLevelDialog(
+    onClose: () -> Unit,
+) {
+    val conqueror = soulRankTiers.last()
+    val regularBadges = soulRankTiers.dropLast(1)
+    var selectedBadge by remember { mutableStateOf<SoulRankTier?>(null) }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = Color.White
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    tonalElevation = 2.dp,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            modifier = Modifier
+                                .size(25.dp)
+                                .clickable { onClose() },
+                            tint = Color(0xFF2D2D2D)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = stringResource(R.string.settings_soul_level),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2D2D2D)
+                        )
+                    }
+                }
+
+                val badgeRows = remember(regularBadges) { regularBadges.chunked(3) }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(badgeRows.size) { rowIndex ->
+                        val row = badgeRows[rowIndex]
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                row.forEach { badge ->
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { selectedBadge = badge },
+                                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth(),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                        ) {
+                                            Image(
+                                                painter = painterResource(badge.iconRes),
+                                                contentDescription = null,
+                                                modifier = Modifier.size(55.dp),
+                                                contentScale = ContentScale.Fit
+                                            )
+                                            Text(
+                                                text = badge.soulLabel,
+                                                color = Color(0xFF5B4B71),
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+                                }
+                                repeat(3 - row.size) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
+                            HorizontalDivider(
+                                color = Color(0xFFE8DEF8),
+                                thickness = 1.dp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                    item {
+                        Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { selectedBadge = conqueror },
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("Final Level", color = Color(0xFF9A6B2F), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Image(
+                                painter = painterResource(conqueror.iconRes),
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                            Text(
+                                text = conqueror.soulLabel,
+                                color = Color(0xFF8A5A24),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    }
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F8FB))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.how_to_increase_soul),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF1F1F1F)
+                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFEFE7FF)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.EmojiEvents,
+                                            contentDescription = null,
+                                            tint = Color(0xFF8D5BEB)
+                                        )
+                                    }
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = stringResource(R.string.receive_gifts),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF242424)
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.soul_hint_line),
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = Color(0xFF8A8A96)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    selectedBadge?.let { badge ->
+        androidx.compose.ui.window.Dialog(onDismissRequest = { selectedBadge = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1B2E)),
+                border = BorderStroke(1.dp, Color(0xFF4C3F66))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = badge.name,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Image(
+                        painter = painterResource(badge.iconRes),
+                        contentDescription = null,
+                        modifier = Modifier.size(if (badge.iconRes == R.drawable.rank_conqueror) 116.dp else 84.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                    Text(
+                        text = "Required Souls: ${badge.soulLabel}",
+                        color = Color(0xFFD7C9F2),
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    TextButton(
+                        onClick = { selectedBadge = null },
+                        modifier = Modifier
+                            .background(
+                                Brush.horizontalGradient(listOf(Color(0xFF7C3AED), Color(0xFF9F67FF))),
+                                RoundedCornerShape(999.dp)
+                            )
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Text(stringResource(R.string.ok), color = Color.White, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -557,6 +808,7 @@ internal fun ProfilePreviewFullPage(
     profilePictureUrl: String?,
     currentUsername: String?,
     signature: String?,
+    soul: Long?,
     receivedGiftHistory: List<ReceivedGiftSummary>,
     friendUids: Set<String>,
     historyUsernames: Map<String, String>,
@@ -568,6 +820,7 @@ internal fun ProfilePreviewFullPage(
     onUserAvatarClick: (String) -> Unit,
     contentBottomPadding: androidx.compose.ui.unit.Dp = 0.dp,
 ) {
+    val rankUi = remember(soul) { resolveSoulRankUi(soul) }
     val topGiftPreview = remember(receivedGiftHistory) {
         receivedGiftHistory
             .groupBy { it.giftId ?: "__unknown__" }
@@ -637,6 +890,8 @@ internal fun ProfilePreviewFullPage(
     var selectedGift by remember(topGiftPreview) { mutableStateOf<GiftWallCardUi?>(null) }
     var showFriendsDialog by remember { mutableStateOf(false) }
     var showContributorsDialog by remember { mutableStateOf(false) }
+    var showSoulLevelDialog by remember { mutableStateOf(false) }
+    val openSoulLevelDialog = { showSoulLevelDialog = true }
     val openUserProfileFromDialog: (String) -> Unit = { uid ->
         if (uid.isNotBlank()) {
             // Close current overlays before opening next profile, so new profile is visible immediately.
@@ -700,13 +955,44 @@ internal fun ProfilePreviewFullPage(
                                     signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
                                     color = Color(0xFF6B4E58)
                                 )
-                                Text(
-                                    "Silver II ✧",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF4B5563)
-                                )
-                                Text("Soul: 5,380", color = Color(0xFF4B5563))
+                                Row(
+                                    modifier = Modifier.clickable(onClick = openSoulLevelDialog),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    rankUi.iconRes?.let { iconRes ->
+                                        Image(
+                                            painter = painterResource(iconRes),
+                                            contentDescription = "${rankUi.name} rank",
+                                            modifier = Modifier.size(34.dp),
+                                            contentScale = ContentScale.Fit
+                                        )
+                                    }
+                                    Text(
+                                        rankUi.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF4B5563)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.clickable(onClick = openSoulLevelDialog),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Image(
+                                        painter = painterResource(R.drawable.ic_soul_cute_ghost),
+                                        contentDescription = "Soul",
+                                        modifier = Modifier.size(20.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                    Text(
+                                        text = formatSoulDisplay(soul),
+                                        color = Color(0xFF4B5563),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
                             }
                         }
                         HorizontalDivider(
@@ -935,6 +1221,11 @@ internal fun ProfilePreviewFullPage(
             ranking = contributorsRanking,
             onClose = { showContributorsDialog = false },
             onUserAvatarClick = openUserProfileFromDialog
+        )
+    }
+    if (showSoulLevelDialog) {
+        SoulLevelDialog(
+            onClose = { showSoulLevelDialog = false }
         )
     }
 }
@@ -1650,6 +1941,55 @@ private data class ContributorRankUi(
     val coins: Long,
     val profileImageUrl: String?,
 )
+
+private data class SoulRankTier(
+    val minSoul: Long,
+    val name: String,
+    val soulLabel: String,
+    val iconRes: Int
+)
+
+private data class SoulRankUi(
+    val name: String,
+    val iconRes: Int?
+)
+
+private val soulRankTiers = listOf(
+    SoulRankTier(minSoul = 1_200L, name = "Bronze I", soulLabel = "1,200", iconRes = R.drawable.rank_bronze_1),
+    SoulRankTier(minSoul = 2_400L, name = "Bronze II", soulLabel = "2,400", iconRes = R.drawable.rank_bronze_2),
+    SoulRankTier(minSoul = 3_600L, name = "Bronze III", soulLabel = "3,600", iconRes = R.drawable.rank_bronze_3),
+    SoulRankTier(minSoul = 4_800L, name = "Silver I", soulLabel = "4,800", iconRes = R.drawable.rank_silver_1),
+    SoulRankTier(minSoul = 6_000L, name = "Silver II", soulLabel = "6,000", iconRes = R.drawable.rank_silver_2),
+    SoulRankTier(minSoul = 7_200L, name = "Silver III", soulLabel = "7,200", iconRes = R.drawable.rank_silver_3),
+    SoulRankTier(minSoul = 8_400L, name = "Gold I", soulLabel = "8,400", iconRes = R.drawable.rank_gold_1),
+    SoulRankTier(minSoul = 9_600L, name = "Gold II", soulLabel = "9,600", iconRes = R.drawable.rank_gold_2),
+    SoulRankTier(minSoul = 12_000L, name = "Gold III", soulLabel = "12k", iconRes = R.drawable.rank_gold_3),
+    SoulRankTier(minSoul = 40_000L, name = "Platinum I", soulLabel = "40k", iconRes = R.drawable.rank_platinum_1),
+    SoulRankTier(minSoul = 60_000L, name = "Platinum II", soulLabel = "60k", iconRes = R.drawable.rank_platinum_2),
+    SoulRankTier(minSoul = 90_000L, name = "Platinum III", soulLabel = "90k", iconRes = R.drawable.rank_platinum_3),
+    SoulRankTier(minSoul = 180_000L, name = "Ace I", soulLabel = "180k", iconRes = R.drawable.rank_ace_1),
+    SoulRankTier(minSoul = 500_000L, name = "Ace II", soulLabel = "500k", iconRes = R.drawable.rank_ace_2),
+    SoulRankTier(minSoul = 950_000L, name = "Ace III", soulLabel = "950k", iconRes = R.drawable.rank_ace_3),
+    SoulRankTier(minSoul = 4_000_000L, name = "Ace IV", soulLabel = "4m", iconRes = R.drawable.rank_ace_4),
+    SoulRankTier(minSoul = 10_000_000L, name = "Ace V", soulLabel = "10m", iconRes = R.drawable.rank_ace_5),
+    SoulRankTier(minSoul = 21_000_000L, name = "Ace VI", soulLabel = "21m", iconRes = R.drawable.rank_ace_6),
+    SoulRankTier(minSoul = 51_000_000L, name = "Conqueror", soulLabel = "51m", iconRes = R.drawable.rank_conqueror),
+)
+
+private fun resolveSoulRankUi(soul: Long?): SoulRankUi {
+    val soulValue = soul ?: 0L
+    val tier = soulRankTiers.lastOrNull { soulValue >= it.minSoul }
+    return if (tier != null) {
+        SoulRankUi(name = tier.name, iconRes = tier.iconRes)
+    } else {
+        SoulRankUi(name = "Unranked", iconRes = null)
+    }
+}
+
+private fun formatSoulDisplay(soul: Long?): String {
+    val soulValue = soul ?: 0L
+    return NumberFormat.getIntegerInstance(Locale.US).format(soulValue)
+}
 
 @Composable
 private fun PolicyLikePageDialog(

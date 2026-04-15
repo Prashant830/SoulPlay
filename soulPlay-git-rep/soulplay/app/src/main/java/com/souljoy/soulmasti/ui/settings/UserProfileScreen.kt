@@ -4,24 +4,25 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.ChatBubbleOutline
@@ -30,12 +31,14 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -44,8 +47,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.gift.GiftCatalog
 import com.souljoy.soulmasti.domain.gift.GiftSendContext
@@ -65,6 +72,7 @@ private data class RemoteProfileData(
     val username: String,
     val profilePictureUrl: String?,
     val signature: String?,
+    val soul: Long?,
     val friendUids: Set<String>,
     val receivedGiftHistory: List<ReceivedGiftSummary>,
     val gameHistory: List<GameHistoryEntry>,
@@ -95,6 +103,8 @@ fun UserProfileScreen(
     var giftSending by remember { mutableStateOf(false) }
     var outgoingPending by remember(currentUid) { mutableStateOf(false) }
     var relationError by remember { mutableStateOf<String?>(null) }
+    var refreshNonce by remember(currentUid) { mutableIntStateOf(0) }
+    var isFetching by remember(currentUid) { mutableStateOf(true) }
 
     val isSelfProfile = myUid != null && currentUid == myUid
     val isFriend = friends.contains(currentUid)
@@ -114,7 +124,37 @@ fun UserProfileScreen(
             }.getOrDefault(false)
         }
     }
-    LaunchedEffect(currentUid) {
+
+    DisposableEffect(currentUid) {
+        val root = FirebaseDatabase.getInstance().reference
+        val bumpListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                refreshNonce += 1
+            }
+            override fun onCancelled(error: DatabaseError) = Unit
+        }
+        val userRef = root.child("users").child(currentUid)
+        val giftsRef = root.child("users").child(currentUid).child("giftsReceived")
+        val roomsRef = root.child("rooms")
+        userRef.addValueEventListener(bumpListener)
+        giftsRef.addValueEventListener(bumpListener)
+        roomsRef.addValueEventListener(bumpListener)
+        val friendsReg: ListenerRegistration = FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(currentUid)
+            .collection("friends")
+            .addSnapshotListener { _, _ -> refreshNonce += 1 }
+
+        onDispose {
+            userRef.removeEventListener(bumpListener)
+            giftsRef.removeEventListener(bumpListener)
+            roomsRef.removeEventListener(bumpListener)
+            friendsReg.remove()
+        }
+    }
+
+    LaunchedEffect(currentUid, refreshNonce) {
+        isFetching = true
         val db = FirebaseDatabase.getInstance().reference
         val userSnap = runCatching { db.child("users").child(currentUid).get().await() }.getOrNull()
         val username = userSnap?.child("username")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
@@ -123,6 +163,7 @@ fun UserProfileScreen(
         val signature = userSnap?.child("signature")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
             ?: userSnap?.child("bio")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
             ?: userSnap?.child("status")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
+        val soul = userSnap.readLongFromSchema("soul", "soulValue", "charms")
         val friendUids = runCatching {
             FirebaseFirestore.getInstance()
                 .collection("users")
@@ -214,19 +255,40 @@ fun UserProfileScreen(
             username = username,
             profilePictureUrl = profilePictureUrl,
             signature = signature,
+            soul = soul,
             friendUids = friendUids,
             receivedGiftHistory = gifts,
             gameHistory = history.sortedByDescending { it.endedAt },
             historyUsernames = profileNames,
             userProfilePhotos = profilePhotos,
         )
+        isFetching = false
     }
 
     val loaded = state
     if (loaded == null) {
         Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFF6EFEF)) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading profile...", style = MaterialTheme.typography.bodyLarge)
+            Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(
+                            Color(0xFF9CA3AF).copy(alpha = 0.82f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                        )
+                        .padding(horizontal = 24.dp, vertical = 18.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(34.dp),
+                            strokeWidth = 2.6.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("Loading...", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    }
+                }
             }
         }
     } else {
@@ -236,6 +298,7 @@ fun UserProfileScreen(
                     profilePictureUrl = loaded.profilePictureUrl,
                     currentUsername = loaded.username,
                     signature = loaded.signature,
+                    soul = loaded.soul,
                     receivedGiftHistory = loaded.receivedGiftHistory,
                     friendUids = loaded.friendUids,
                     historyUsernames = loaded.historyUsernames,
@@ -352,6 +415,28 @@ fun UserProfileScreen(
                     }
                 }
             }
+            if (isFetching) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(
+                            Color(0xFF9CA3AF).copy(alpha = 0.78f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                        )
+                        .padding(horizontal = 22.dp, vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(30.dp),
+                            strokeWidth = 2.4.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Loading...", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+                    }
+                }
+            }
         }
         relationError?.let { err ->
             LaunchedEffect(err) { Toast.makeText(context, err, Toast.LENGTH_SHORT).show() }
@@ -446,4 +531,16 @@ fun UserProfileScreen(
         )
         GiftCelebrationOverlayHost(queue = giftCelebration)
     }
+}
+
+private fun DataSnapshot?.readLongFromSchema(vararg keys: String): Long? {
+    val root = this ?: return null
+    for (key in keys) {
+        val child = root.child(key)
+        child.getValue(Long::class.java)?.let { return it }
+        child.getValue(Int::class.java)?.toLong()?.let { return it }
+        child.getValue(Double::class.java)?.toLong()?.let { return it }
+        child.getValue(String::class.java)?.trim()?.toLongOrNull()?.let { return it }
+    }
+    return null
 }
