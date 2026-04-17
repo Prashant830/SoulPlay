@@ -9,8 +9,11 @@ object SoulplayDestinations {
     const val GoldShop = "gold_shop"
     const val VoiceRoom = "voice_room"
     const val VoiceRoomWithId = "voice_room/{roomId}"
+    const val SocialVoiceHub = "social_voice_hub"
+    const val SocialVoiceRoomWithId = "social_voice_room/{roomId}"
 
     fun voiceRoom(roomId: String) = "voice_room/$roomId"
+    fun socialVoiceRoom(roomId: String) = "social_voice_room/$roomId"
 
     const val Settings = "settings"
     const val UserProfile = "user_profile/{uid}"

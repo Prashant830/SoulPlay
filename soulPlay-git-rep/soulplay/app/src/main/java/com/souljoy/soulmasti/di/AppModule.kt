@@ -9,10 +9,12 @@ import com.souljoy.soulmasti.data.billing.PlayBillingRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGameSessionRepository
 import com.souljoy.soulmasti.data.firebase.FirebaseGiftRepository
 import com.souljoy.soulmasti.data.firebase.FirestoreSocialRepository
+import com.souljoy.soulmasti.data.firebase.FirebaseSocialVoiceRoomRepository
 import com.souljoy.soulmasti.data.voice.AgoraVoiceRoomRepository
 import com.souljoy.soulmasti.domain.repository.GameSessionRepository
 import com.souljoy.soulmasti.domain.repository.GiftRepository
 import com.souljoy.soulmasti.domain.repository.SocialRepository
+import com.souljoy.soulmasti.domain.repository.SocialVoiceRoomRepository
 import com.souljoy.soulmasti.domain.repository.VoiceRoomRepository
 import com.souljoy.soulmasti.ui.auth.AuthGateViewModel
 import com.souljoy.soulmasti.ui.auth.CreateProfileViewModel
@@ -23,6 +25,8 @@ import com.souljoy.soulmasti.ui.chat.ChatViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
 import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsViewModel
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomViewModel
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -38,6 +42,7 @@ val appModule = module {
     single { CoinPurchaseCoordinator(get(), get()) }
     single<GiftRepository> { FirebaseGiftRepository(get(), get()) }
     single<SocialRepository> { FirestoreSocialRepository(get(), get()) }
+    single<SocialVoiceRoomRepository> { FirebaseSocialVoiceRoomRepository(get(), get()) }
     single<VoiceRoomRepository> { AgoraVoiceRoomRepository(androidContext()) }
     viewModel { HomeViewModel(androidApplication(), get()) }
     viewModel { GoldShopViewModel(get(), get(), get()) }
@@ -46,6 +51,7 @@ val appModule = module {
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }
     viewModel { SettingsViewModel(androidApplication(), get(), get(), get(), get(), get()) }
     viewModel { ChatViewModel(androidApplication(), get(), get(), get()) }
+    viewModel { SocialVoiceRoomsViewModel(androidApplication(), get(), get(), get()) }
     viewModel { params ->
         ChatThreadViewModel(
             androidApplication(),
@@ -61,6 +67,15 @@ val appModule = module {
             androidApplication(),
             get(),
             get(),
+            get(),
+            get(),
+            get(),
+            roomId = params.get(),
+        )
+    }
+    viewModel { params ->
+        SocialVoiceRoomViewModel(
+            androidApplication(),
             get(),
             get(),
             get(),

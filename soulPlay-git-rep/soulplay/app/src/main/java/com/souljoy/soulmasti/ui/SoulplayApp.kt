@@ -52,6 +52,10 @@ import com.souljoy.soulmasti.ui.shop.GoldShopScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomNeedMatchScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomScreen
 import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomScreen
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsScreen
+import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -66,7 +70,7 @@ private data class BottomTab(
 
 private val bottomTabs = listOf(
     BottomTab(SoulplayDestinations.Home, "Home", Icons.Filled.Home),
-    BottomTab(SoulplayDestinations.VoiceRoom, "Voice Room", Icons.Filled.Mic),
+    BottomTab(SoulplayDestinations.SocialVoiceHub, "Voice Room", Icons.Filled.Mic),
     BottomTab(SoulplayDestinations.Chat, "Chat", Icons.Filled.ChatBubbleOutline),
     BottomTab(SoulplayDestinations.Settings, "Profile", Icons.Filled.Person)
 )
@@ -269,6 +273,19 @@ fun SoulplayApp(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(SoulplayDestinations.SocialVoiceHub) {
+                val socialVm: SocialVoiceRoomsViewModel = koinViewModel()
+                SocialVoiceRoomsScreen(
+                    viewModel = socialVm,
+                    onOpenRoom = { roomId ->
+                        if (roomId.isNotBlank()) {
+                            navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                )
+            }
             composable(SoulplayDestinations.VoiceRoom) {
                 VoiceRoomNeedMatchScreen(
                     onGoHome = {
@@ -316,6 +333,24 @@ fun SoulplayApp(
                                 }
                             }
                         }
+                    )
+                }
+            }
+            composable(
+                route = SoulplayDestinations.SocialVoiceRoomWithId,
+                arguments = listOf(navArgument("roomId") { type = NavType.StringType }),
+            ) { entry ->
+                val roomId = entry.arguments?.getString("roomId").orEmpty()
+                LaunchedEffect(roomId) {
+                    if (roomId.isBlank()) navController.popBackStack()
+                }
+                if (roomId.isNotBlank()) {
+                    val vm: SocialVoiceRoomViewModel = koinViewModel(parameters = { parametersOf(roomId) })
+                    SocialVoiceRoomScreen(
+                        viewModel = vm,
+                        hasVoicePermission = hasVoicePermission,
+                        requestVoicePermission = requestVoicePermission,
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }
