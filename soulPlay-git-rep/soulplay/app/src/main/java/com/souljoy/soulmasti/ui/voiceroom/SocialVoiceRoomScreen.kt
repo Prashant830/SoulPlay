@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -69,6 +71,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
+import com.souljoy.soulmasti.ui.common.SpeakingWaveRings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 
@@ -79,6 +83,7 @@ fun SocialVoiceRoomScreen(
     hasVoicePermission: () -> Boolean,
     requestVoicePermission: () -> Unit,
     onBack: () -> Unit,
+    onOpenUserProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -88,6 +93,7 @@ fun SocialVoiceRoomScreen(
     val participants by viewModel.participants.collectAsStateWithLifecycle()
     val connectionState by viewModel.connectionState.collectAsStateWithLifecycle()
     val isMuted by viewModel.isMuted.collectAsStateWithLifecycle()
+    val audioLevels by viewModel.audioLevelsByUid.collectAsStateWithLifecycle()
     val incomingInvite by viewModel.incomingInvite.collectAsStateWithLifecycle()
     val userProfiles by viewModel.userProfiles.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
@@ -98,6 +104,7 @@ fun SocialVoiceRoomScreen(
     var joinTickerText by remember { mutableStateOf<String?>(null) }
     var showRenameRoomDialog by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf("") }
+    var profileDialogSeatNo by remember { mutableStateOf<Int?>(null) }
 
     LaunchedEffect(Unit) {
         if (hasVoicePermission()) viewModel.joinAgoraVoice() else requestVoicePermission()
@@ -119,6 +126,36 @@ fun SocialVoiceRoomScreen(
     val amOwnerOrAdmin = myUid != null && (myUid == room?.ownerUid || room?.adminUids?.contains(myUid) == true)
     val roomActive = room?.ownerOnline == true && room?.collapsed != true
     val seatByNo = remember(seats) { seats.associateBy { it.seatNo } }
+    fun handleSeatTap(seatNo: Int, occupiedBySelf: Boolean) {
+        val seat = seatByNo[seatNo] ?: return
+        val occupiedUid = seat.occupantUid
+        val canTake = seat.occupantUid.isNullOrBlank() && !seat.locked
+        if (!occupiedUid.isNullOrBlank()) {
+            profileDialogSeatNo = seatNo
+            return
+        }
+        if (!roomActive && !(myUid == room?.ownerUid)) {
+            viewModel.showInfo("Owner is offline. Seats disabled")
+        } else if (amOwnerOrAdmin || occupiedBySelf) {
+            selectedSeatNo = seatNo
+        } else if (canTake) {
+            viewModel.onSeatClick(seatNo, occupiedBySelf = false)
+        } else if (seat.locked) {
+            viewModel.showInfo("Seat is locked")
+        } else {
+            viewModel.showInfo("Only owner can invite")
+        }
+    }
+
+    val speakingLevelForUid: (String?) -> Float = { uid ->
+        val safeUid = uid?.takeIf { it.isNotBlank() }
+        if (safeUid == null) {
+            0f
+        } else {
+        val agoraUid = FirebaseUidMapping.agoraUidFromFirebaseUid(safeUid)
+        audioLevels[agoraUid] ?: 0f
+        }
+    }
 
     Box(
         modifier = modifier
@@ -232,22 +269,12 @@ fun SocialVoiceRoomScreen(
                     seatOrder = listOf(1, 2),
                     seatByNo = seatByNo,
                     myUid = myUid,
+                    ownerUid = room?.ownerUid,
                     amOwnerOrAdmin = amOwnerOrAdmin,
-                    onSeatAction = { seatNo, occupiedBySelf ->
-                        val seat = seatByNo[seatNo]
-                        val canTake = seat?.occupantUid.isNullOrBlank() && (seat?.locked != true)
-                        if (!roomActive && !(myUid == room?.ownerUid)) {
-                            viewModel.showInfo("Owner is offline. Seats disabled")
-                        } else if (amOwnerOrAdmin || occupiedBySelf) {
-                            selectedSeatNo = seatNo
-                        } else if (canTake) {
-                            viewModel.onSeatClick(seatNo, occupiedBySelf = false)
-                        } else {
-                            viewModel.showInfo("Only owner can invite")
-                        }
-                    },
+                    onSeatAction = ::handleSeatTap,
                     canTakeSeat = { seat -> seat.occupantUid.isNullOrBlank() && !seat.locked },
-                    isSpeaking = { uid -> viewModel.isUserSpeaking(uid) },
+                    isSpeaking = { uid -> speakingLevelForUid(uid) >  0.035f },
+                    speakingLevel = speakingLevelForUid,
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
@@ -257,24 +284,12 @@ fun SocialVoiceRoomScreen(
                     seatOrder = listOf(3, 4, 5, 6),
                     seatByNo = seatByNo,
                     myUid = myUid,
+                    ownerUid = room?.ownerUid,
                     amOwnerOrAdmin = amOwnerOrAdmin,
-                    onSeatAction = { seatNo, occupiedBySelf ->
-                        val seat = seatByNo[seatNo]
-                        val canTake = seat?.occupantUid.isNullOrBlank() && (seat?.locked != true)
-                        if (!roomActive && !(myUid == room?.ownerUid)) {
-                            viewModel.showInfo("Owner is offline. Seats disabled")
-                        } else if (amOwnerOrAdmin || occupiedBySelf) {
-                            selectedSeatNo = seatNo
-                        } else if (canTake) {
-                            viewModel.onSeatClick(seatNo, occupiedBySelf = false)
-                        } else if (seat?.locked == true) {
-                            viewModel.showInfo("Seat is locked")
-                        } else {
-                            viewModel.showInfo("Only owner can invite")
-                        }
-                    },
+                    onSeatAction = ::handleSeatTap,
                     canTakeSeat = { seat -> seat.occupantUid.isNullOrBlank() && !seat.locked },
-                    isSpeaking = { uid -> viewModel.isUserSpeaking(uid) },
+                    isSpeaking = { uid -> speakingLevelForUid(uid) >  0.035f },
+                    speakingLevel = speakingLevelForUid,
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
@@ -284,24 +299,12 @@ fun SocialVoiceRoomScreen(
                     seatOrder = listOf(7, 8, 9, 10),
                     seatByNo = seatByNo,
                     myUid = myUid,
+                    ownerUid = room?.ownerUid,
                     amOwnerOrAdmin = amOwnerOrAdmin,
-                    onSeatAction = { seatNo, occupiedBySelf ->
-                        val seat = seatByNo[seatNo]
-                        val canTake = seat?.occupantUid.isNullOrBlank() && (seat?.locked != true)
-                        if (!roomActive && !(myUid == room?.ownerUid)) {
-                            viewModel.showInfo("Owner is offline. Seats disabled")
-                        } else if (amOwnerOrAdmin || occupiedBySelf) {
-                            selectedSeatNo = seatNo
-                        } else if (canTake) {
-                            viewModel.onSeatClick(seatNo, occupiedBySelf = false)
-                        } else if (seat?.locked == true) {
-                            viewModel.showInfo("Seat is locked")
-                        } else {
-                            viewModel.showInfo("Only owner can invite")
-                        }
-                    },
+                    onSeatAction = ::handleSeatTap,
                     canTakeSeat = { seat -> seat.occupantUid.isNullOrBlank() && !seat.locked },
-                    isSpeaking = { uid -> viewModel.isUserSpeaking(uid) },
+                    isSpeaking = { uid -> speakingLevelForUid(uid) > 0.035f },
+                    speakingLevel = speakingLevelForUid,
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
@@ -448,6 +451,107 @@ fun SocialVoiceRoomScreen(
         }
     }
 
+    val profileSeat = room?.seats?.firstOrNull { it.seatNo == profileDialogSeatNo && !it.occupantUid.isNullOrBlank() }
+    if (profileSeat != null) {
+        val targetUid = profileSeat.occupantUid.orEmpty()
+        val isSelf = myUid != null && myUid == targetUid
+        val isOwner = myUid != null && myUid == room?.ownerUid
+        val isAdmin = myUid != null && room?.adminUids?.contains(myUid) == true
+        val canMute = (isOwner || isAdmin || isSelf)
+        val canUnseat = (isOwner || isAdmin || isSelf) && profileSeat.seatNo != 1
+        val canGift = true
+        val displayName = userProfiles[targetUid]?.name?.takeIf { it.isNotBlank() }
+            ?: profileSeat.occupantName
+            ?: "User"
+        val photoUrl = viewModel.profileImageUrl(targetUid)
+        AlertDialog(
+            onDismissRequest = { profileDialogSeatNo = null },
+            title = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color(0x3322D3EE))
+                            .clickable {
+                                profileDialogSeatNo = null
+                                onOpenUserProfile(targetUid)
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (!photoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = photoUrl,
+                                contentDescription = "Profile",
+                                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(999.dp)),
+                            )
+                        } else {
+                            Text(
+                                text = displayName.take(1).uppercase(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                    Column {
+                        Text(displayName, color = Color(0xFF111827), fontWeight = FontWeight.Bold)
+                        Text("Seat ${profileSeat.seatNo}", color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            text = {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (canMute) {
+                        Button(
+                            onClick = {
+                                viewModel.setSeatMuted(profileSeat.seatNo, !profileSeat.muted)
+                                profileDialogSeatNo = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                        ) {
+                            Text(if (profileSeat.muted) "Unmute" else "Mute")
+                        }
+                    }
+                    if (canUnseat) {
+                        Button(
+                            onClick = {
+                                if (isSelf) {
+                                    viewModel.onSeatClick(profileSeat.seatNo, occupiedBySelf = true)
+                                } else {
+                                    viewModel.removeSeatOccupant(profileSeat.seatNo)
+                                }
+                                profileDialogSeatNo = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB91C1C)),
+                        ) {
+                            Text("Unseat")
+                        }
+                    }
+                    if (canGift) {
+                        Button(
+                            onClick = {
+                                viewModel.showInfo("Gift feature coming soon")
+                                profileDialogSeatNo = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                        ) {
+                            Text("Gift")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { profileDialogSeatNo = null }) { Text("Close") }
+            },
+        )
+    }
+
     val inviteSeatNo = showInvitePickerForSeat
     if (inviteSeatNo != null) {
         val onlineUsers = room?.onlineUids.orEmpty().filter { it != myUid }.sorted()
@@ -538,10 +642,12 @@ private fun RoomSeatRow(
     seatOrder: List<Int>,
     seatByNo: Map<Int, com.souljoy.soulmasti.domain.model.SocialVoiceSeat>,
     myUid: String?,
+    ownerUid: String?,
     amOwnerOrAdmin: Boolean,
     onSeatAction: (seatNo: Int, occupiedBySelf: Boolean) -> Unit,
     canTakeSeat: (com.souljoy.soulmasti.domain.model.SocialVoiceSeat) -> Boolean,
     isSpeaking: (String?) -> Boolean,
+    speakingLevel: (String?) -> Float,
     displayNameForUid: (String?) -> String?,
     profileUrlForUid: (String?) -> String?,
     ownerOnline: Boolean,
@@ -556,7 +662,13 @@ private fun RoomSeatRow(
     ) {
         seatOrder.forEachIndexed { idx, no ->
             val seat = seatByNo[no] ?: return@forEachIndexed
-            val occupiedBySelf = myUid != null && seat.occupantUid == myUid
+            val isMyOwnerSeat = no == 1 && myUid != null && myUid == ownerUid
+            val occupiedBySelf = myUid != null && (seat.occupantUid == myUid || isMyOwnerSeat)
+            val speakingUid = when {
+                occupiedBySelf -> myUid
+                no == 1 && !ownerUid.isNullOrBlank() -> ownerUid
+                else -> seat.occupantUid
+            }
             val canTake = canTakeSeat(seat)
             val isOwnerSeat = no == 1
             val ownerIsOfflineSeat = isOwnerSeat && !ownerOnline
@@ -565,55 +677,69 @@ private fun RoomSeatRow(
                 modifier = Modifier
                     .then(if (twoSeatRow) Modifier.wrapContentWidth() else Modifier)
                     .clickable {
-                        if (amOwnerOrAdmin || occupiedBySelf || canTake) {
-                            onSeatAction(no, occupiedBySelf)
-                        }
+                        onSeatAction(no, occupiedBySelf)
                     }
                     .padding(horizontal = 2.dp),
             ) {
                 Box(
                     modifier = Modifier
-                        .size(if (isCompact) 46.dp else 58.dp)
-                        .border(
-                            width = if (isSpeaking(seat.occupantUid)) 2.dp else 1.dp,
-                            color = if (isSpeaking(seat.occupantUid)) Color(0xFF22D3EE) else Color(0xFFD1B96D),
-                            shape = RoundedCornerShape(999.dp),
-                        )
-                        .background(
-                            color = if (seat.locked) Color(0xFF3F1D1D) else Color(0x330B1220),
-                            shape = RoundedCornerShape(999.dp),
-                        ),
+                        .size(if (isCompact) 88.dp else 100.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = if (seat.occupantUid.isNullOrBlank() && !ownerIsOfflineSeat) "+" else "",
-                        color = Color.White.copy(alpha = 0.9f),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    val photoUrl = profileUrlForUid(seat.occupantUid)
-                    if (!photoUrl.isNullOrBlank()) {
-                        AsyncImage(
-                            model = photoUrl,
-                            contentDescription = "User profile",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(999.dp)),
+                    if (isSpeaking(speakingUid)) {
+                        SpeakingWaveRings(
+                            speakingLevel = speakingLevel(speakingUid),
+                            ringColor = Color(0xFF22D3EE),
+                            modifier = Modifier.fillMaxSize(),
                         )
                     }
-                    if (seat.locked) {
-                        Icon(
-                            imageVector = Icons.Filled.Lock,
-                            contentDescription = null,
-                            tint = Color(0xFFFCA5A5),
-                            modifier = Modifier.size(14.dp).align(Alignment.TopEnd),
+
+                    Box(
+                        modifier = Modifier
+                            .size(if (isCompact) 46.dp else 58.dp)
+                            .border(
+                                width = if (isSpeaking(speakingUid)) 2.dp else 1.dp,
+                                color = if (isSpeaking(speakingUid)) Color(0xFF22D3EE) else Color(
+                                    0xFFD1B96D
+                                ),
+                                shape = RoundedCornerShape(999.dp),
+                            )
+                            .background(
+                                color = if (seat.locked) Color(0xFF3F1D1D) else Color(0x330B1220),
+                                shape = RoundedCornerShape(999.dp),
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = if (seat.occupantUid.isNullOrBlank() && !ownerIsOfflineSeat) "+" else "",
+                            color = Color.White.copy(alpha = 0.9f),
+                            style = MaterialTheme.typography.titleMedium,
                         )
+                        val photoUrl = profileUrlForUid(speakingUid)
+                        if (!photoUrl.isNullOrBlank()) {
+                            AsyncImage(
+                                model = photoUrl,
+                                contentDescription = "User profile",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(999.dp)),
+                            )
+                        }
+                        if (seat.locked) {
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = null,
+                                tint = Color(0xFFFCA5A5),
+                                modifier = Modifier.size(14.dp).align(Alignment.TopEnd),
+                            )
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = when {
                         ownerIsOfflineSeat -> "Owner offline"
-                        !displayNameForUid(seat.occupantUid).isNullOrBlank() -> displayNameForUid(seat.occupantUid).orEmpty()
+                        !displayNameForUid(speakingUid).isNullOrBlank() -> displayNameForUid(speakingUid).orEmpty()
                         !seat.occupantName.isNullOrBlank() -> seat.occupantName
                         else -> "Seat $no"
                     },
@@ -622,18 +748,22 @@ private fun RoomSeatRow(
                     maxLines = 1,
                 )
                 if (seat.muted) {
-                    Text("Muted", color = Color(0xFFFCA5A5), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-            if (idx != seatOrder.lastIndex) {
-                if (twoSeatRow) {
-                    Spacer(modifier = Modifier.width(18.dp))
-                } else {
                     Text(
-                        text = "〰",
-                        color = Color(0xAA94A3B8),
-                        modifier = Modifier.padding(top = if (isCompact) 14.dp else 18.dp),
+                        "Muted",
+                        color = Color(0xFFFCA5A5),
+                        style = MaterialTheme.typography.labelSmall
                     )
+                }
+                if (idx != seatOrder.lastIndex) {
+                    if (twoSeatRow) {
+                        Spacer(modifier = Modifier.width(18.dp))
+                    } else {
+                        Text(
+                            text = "〰",
+                            color = Color(0xAA94A3B8),
+                            modifier = Modifier.padding(top = if (isCompact) 14.dp else 18.dp),
+                        )
+                    }
                 }
             }
         }

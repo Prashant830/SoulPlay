@@ -198,7 +198,10 @@ class SocialVoiceRoomViewModel(
 
     fun toggleMute() {
         val uid = myUid
-        val hasSeat = uid != null && _room.value?.seats?.any { it.occupantUid == uid } == true
+        val hasSeat = uid != null && (
+            _room.value?.seats?.any { it.occupantUid == uid } == true ||
+                _room.value?.ownerUid == uid
+            )
         if (!hasSeat) {
             _toastEvents.tryEmit("Take a seat to speak")
             if (!isMuted.value) {
@@ -210,12 +213,10 @@ class SocialVoiceRoomViewModel(
         voiceRoomRepository.toggleMute()
     }
 
-    fun isUserSpeaking(firebaseUid: String?): Boolean {
-        val uid = firebaseUid?.takeIf { it.isNotBlank() } ?: return false
-        val agoraUid = FirebaseUidMapping.agoraUidFromFirebaseUid(uid)
-        val level = audioLevelsByUid.value[agoraUid] ?: 0f
-        return level > 0.08f
-    }
+
+
+
+
 
     fun sendSeatInvite(seatNo: Int, toUid: String) {
         viewModelScope.launch {

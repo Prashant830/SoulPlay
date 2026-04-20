@@ -224,7 +224,13 @@ class FirebaseSocialVoiceRoomRepository(
         val ownerUid = roomSnap.child("ownerUid").getValue(String::class.java).orEmpty()
         val adminUids = readAdminUids(roomSnap)
         if (uid != ownerUid && !adminUids.contains(uid)) error("Only owner/admin can lock seats")
-        roomRef.child("seats").child(seatNo.toString()).child("locked").setValue(locked).await()
+        val seatRef = roomRef.child("seats").child(seatNo.toString())
+        if (locked) {
+            // Closing an occupied seat should force-unseat current user so owner/admin action always works.
+            seatRef.child("uid").setValue("").await()
+            seatRef.child("muted").setValue(false).await()
+        }
+        seatRef.child("locked").setValue(locked).await()
     }
 
     override suspend fun setSeatMuted(roomId: String, seatNo: Int, muted: Boolean): Result<Unit> = runCatching {

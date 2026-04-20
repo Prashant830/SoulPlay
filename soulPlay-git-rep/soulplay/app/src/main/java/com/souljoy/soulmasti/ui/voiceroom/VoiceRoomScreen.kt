@@ -2,12 +2,7 @@ package com.souljoy.soulmasti.ui.voiceroom
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -90,11 +85,10 @@ import com.souljoy.soulmasti.domain.model.VoiceConnectionState
 import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
 import com.souljoy.soulmasti.ui.common.gift.rememberGiftCelebrationQueue
 import coil.compose.AsyncImage
-import kotlin.math.PI
+import com.souljoy.soulmasti.ui.common.SpeakingWaveRings
 import kotlin.random.Random
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.sin
 
 private val RoyalCourtBgTop = Color(0xFFF8FAFC)
 private val RoyalCourtBgBottom = Color(0xFFEFF6FF)
@@ -1174,43 +1168,7 @@ private fun RoomTopBar(inRoom: Boolean, roomLabel: String, onExitClick: () -> Un
     }
 }
 
-@Composable
-private fun SpeakingWaveRings(
-    speakingLevel: Float,
-    ringColor: Color,
-    modifier: Modifier = Modifier
-) {
-    val active = speakingLevel > 0.035f
-    val transition = rememberInfiniteTransition(label = "speakRings")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "ringPhase"
-    )
-    if (!active) return
-    Box(modifier = modifier, contentAlignment = Alignment.Center) {
-        for (i in 2 downTo 0) {
-            val stagger = i / 3f
-            val wave = (sin((phase + stagger) * 2 * PI).toFloat() * 0.5f + 0.5f)
-            val scale = 1f + 0.1f * wave + 0.12f * speakingLevel.coerceIn(0f, 1f)
-            val alpha = (0.5f - i * 0.14f) * (0.4f + 0.6f * speakingLevel)
-            Box(
-                modifier = Modifier
-                    .size((76 + (i + 1) * 12).dp)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        this.alpha = alpha
-                    }
-                    .border(2.dp, ringColor.copy(alpha = 0.7f), CircleShape)
-            )
-        }
-    }
-}
+
 
 @Composable
 private fun PlayerSlotCard(

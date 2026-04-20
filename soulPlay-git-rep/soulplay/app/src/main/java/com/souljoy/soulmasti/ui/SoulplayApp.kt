@@ -351,6 +351,11 @@ fun SoulplayApp(
                         hasVoicePermission = hasVoicePermission,
                         requestVoicePermission = requestVoicePermission,
                         onBack = { navController.popBackStack() },
+                        onOpenUserProfile = { uid ->
+                            if (uid.isNotBlank()) {
+                                navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                            }
+                        },
                     )
                 }
             }
