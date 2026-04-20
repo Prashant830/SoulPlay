@@ -24,9 +24,9 @@ import com.souljoy.soulmasti.ui.chat.ChatThreadViewModel
 import com.souljoy.soulmasti.ui.chat.ChatViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
 import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
-import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsViewModel
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsViewModel
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomViewModel
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
@@ -76,6 +76,7 @@ val appModule = module {
     viewModel { params ->
         SocialVoiceRoomViewModel(
             androidApplication(),
+            get(),
             get(),
             get(),
             get(),

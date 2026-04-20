@@ -49,13 +49,13 @@ import com.souljoy.soulmasti.ui.navigation.SoulplayDestinations
 import com.souljoy.soulmasti.ui.settings.SettingsScreen
 import com.souljoy.soulmasti.ui.settings.UserProfileScreen
 import com.souljoy.soulmasti.ui.shop.GoldShopScreen
-import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomNeedMatchScreen
-import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomScreen
-import com.souljoy.soulmasti.ui.voiceroom.VoiceRoomViewModel
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomScreen
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomViewModel
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsScreen
-import com.souljoy.soulmasti.ui.voiceroom.SocialVoiceRoomsViewModel
+import com.souljoy.soulmasti.ui.voice.game.VoiceRoomNeedMatchScreen
+import com.souljoy.soulmasti.ui.voice.game.VoiceRoomScreen
+import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomScreen
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomViewModel
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsScreen
+import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
@@ -352,6 +352,11 @@ fun SoulplayApp(
                         requestVoicePermission = requestVoicePermission,
                         onBack = { navController.popBackStack() },
                         onOpenUserProfile = { uid ->
+                            if (uid.isNotBlank()) {
+                                navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                            }
+                        },
+                        onOpenSoulLevel = { uid ->
                             if (uid.isNotBlank()) {
                                 navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
                             }

@@ -67,8 +67,8 @@ import com.souljoy.soulmasti.domain.repository.GiftRepository
 import com.souljoy.soulmasti.domain.repository.SocialRepository
 import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
 import com.souljoy.soulmasti.ui.common.gift.rememberGiftCelebrationQueue
-import com.souljoy.soulmasti.ui.voiceroom.GiftWallDialog
-import com.souljoy.soulmasti.ui.voiceroom.defaultGiftWallItems
+import com.souljoy.soulmasti.ui.voice.game.GiftWallDialog
+import com.souljoy.soulmasti.ui.voice.game.defaultGiftWallItems
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.koin.compose.koinInject

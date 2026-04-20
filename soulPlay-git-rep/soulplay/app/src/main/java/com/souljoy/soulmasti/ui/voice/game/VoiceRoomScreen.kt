@@ -1,4 +1,4 @@
-package com.souljoy.soulmasti.ui.voiceroom
+package com.souljoy.soulmasti.ui.voice.game
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing

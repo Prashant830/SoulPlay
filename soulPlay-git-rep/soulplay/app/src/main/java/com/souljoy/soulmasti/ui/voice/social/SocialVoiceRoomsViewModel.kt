@@ -1,4 +1,4 @@
-package com.souljoy.soulmasti.ui.voiceroom
+package com.souljoy.soulmasti.ui.voice.social
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel

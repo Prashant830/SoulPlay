@@ -109,6 +109,8 @@ import com.souljoy.soulmasti.domain.gift.GiftFxResources
 import com.souljoy.soulmasti.domain.model.GameHistoryEntry
 import com.souljoy.soulmasti.domain.model.MatchOutcome
 import com.souljoy.soulmasti.domain.repository.SocialRepository
+import com.souljoy.soulmasti.ui.common.SoulBadgeTier
+import com.souljoy.soulmasti.ui.common.SoulBadgeTiers
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.text.NumberFormat
@@ -545,7 +547,7 @@ private fun SoulLevelDialog(
 ) {
     val conqueror = soulRankTiers.last()
     val regularBadges = soulRankTiers.dropLast(1)
-    var selectedBadge by remember { mutableStateOf<SoulRankTier?>(null) }
+    var selectedBadge by remember { mutableStateOf<SoulBadgeTier?>(null) }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose,
@@ -1969,39 +1971,12 @@ private data class ContributorRankUi(
 private fun isContributorProfileClickable(uid: String): Boolean =
     uid.isNotBlank() && !uid.startsWith("dummy_contributor_")
 
-private data class SoulRankTier(
-    val minSoul: Long,
-    val name: String,
-    val soulLabel: String,
-    val iconRes: Int
-)
-
 private data class SoulRankUi(
     val name: String,
     val iconRes: Int?
 )
 
-private val soulRankTiers = listOf(
-    SoulRankTier(minSoul = 1_200L, name = "Bronze I", soulLabel = "1,200", iconRes = R.drawable.rank_bronze_1),
-    SoulRankTier(minSoul = 2_400L, name = "Bronze II", soulLabel = "2,400", iconRes = R.drawable.rank_bronze_2),
-    SoulRankTier(minSoul = 3_600L, name = "Bronze III", soulLabel = "3,600", iconRes = R.drawable.rank_bronze_3),
-    SoulRankTier(minSoul = 4_800L, name = "Silver I", soulLabel = "4,800", iconRes = R.drawable.rank_silver_1),
-    SoulRankTier(minSoul = 6_000L, name = "Silver II", soulLabel = "6,000", iconRes = R.drawable.rank_silver_2),
-    SoulRankTier(minSoul = 7_200L, name = "Silver III", soulLabel = "7,200", iconRes = R.drawable.rank_silver_3),
-    SoulRankTier(minSoul = 8_400L, name = "Gold I", soulLabel = "8,400", iconRes = R.drawable.rank_gold_1),
-    SoulRankTier(minSoul = 9_600L, name = "Gold II", soulLabel = "9,600", iconRes = R.drawable.rank_gold_2),
-    SoulRankTier(minSoul = 12_000L, name = "Gold III", soulLabel = "12k", iconRes = R.drawable.rank_gold_3),
-    SoulRankTier(minSoul = 40_000L, name = "Platinum I", soulLabel = "40k", iconRes = R.drawable.rank_platinum_1),
-    SoulRankTier(minSoul = 60_000L, name = "Platinum II", soulLabel = "60k", iconRes = R.drawable.rank_platinum_2),
-    SoulRankTier(minSoul = 90_000L, name = "Platinum III", soulLabel = "90k", iconRes = R.drawable.rank_platinum_3),
-    SoulRankTier(minSoul = 180_000L, name = "Ace I", soulLabel = "180k", iconRes = R.drawable.rank_ace_1),
-    SoulRankTier(minSoul = 500_000L, name = "Ace II", soulLabel = "500k", iconRes = R.drawable.rank_ace_2),
-    SoulRankTier(minSoul = 950_000L, name = "Ace III", soulLabel = "950k", iconRes = R.drawable.rank_ace_3),
-    SoulRankTier(minSoul = 4_000_000L, name = "Ace IV", soulLabel = "4m", iconRes = R.drawable.rank_ace_4),
-    SoulRankTier(minSoul = 10_000_000L, name = "Ace V", soulLabel = "10m", iconRes = R.drawable.rank_ace_5),
-    SoulRankTier(minSoul = 21_000_000L, name = "Ace VI", soulLabel = "21m", iconRes = R.drawable.rank_ace_6),
-    SoulRankTier(minSoul = 51_000_000L, name = "Conqueror", soulLabel = "51m", iconRes = R.drawable.rank_conqueror),
-)
+private val soulRankTiers: List<SoulBadgeTier> = SoulBadgeTiers
 
 private fun resolveSoulRankUi(soul: Long?): SoulRankUi {
     val soulValue = soul ?: 0L

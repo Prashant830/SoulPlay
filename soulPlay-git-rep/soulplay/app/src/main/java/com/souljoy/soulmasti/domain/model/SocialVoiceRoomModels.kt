@@ -25,6 +25,12 @@ data class SocialVoiceRoomSnapshot(
     val onlineUids: Set<String>,
     val seats: List<SocialVoiceSeat>,
     val onlineCount: Int,
+    val contributionDaily: Map<String, Long> = emptyMap(),
+    val contributionWeekly: Map<String, Long> = emptyMap(),
+    val contributionTotal: Map<String, Long> = emptyMap(),
+    val contributionDailySoul: Map<String, Long> = emptyMap(),
+    val contributionWeeklySoul: Map<String, Long> = emptyMap(),
+    val contributionTotalSoul: Map<String, Long> = emptyMap(),
 )
 
 data class SocialVoiceChatMessage(

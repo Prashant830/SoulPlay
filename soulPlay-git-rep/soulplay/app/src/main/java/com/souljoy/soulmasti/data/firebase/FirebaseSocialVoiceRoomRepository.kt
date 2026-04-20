@@ -425,15 +425,18 @@ class FirebaseSocialVoiceRoomRepository(
         val ownerUid = roomSnap.child("ownerUid").getValue(String::class.java).orEmpty()
         if (ownerUid != uid) return@runCatching
 
-        // Owner left: collapse room to lobby mode.
-        roomRef.child("collapsed").setValue(true).await()
-        roomRef.child("chat").removeValue().await()
-        roomRef.child("seatInvites").removeValue().await()
-        roomRef.child("seats").get().await().children.forEach { child ->
+        // Owner left: collapse room to lobby mode using one batched update for faster exit.
+        val updates = linkedMapOf<String, Any?>(
+            "collapsed" to true,
+            "chat" to null,
+            "seatInvites" to null,
+        )
+        roomSnap.child("seats").children.forEach { child ->
             val key = child.key ?: return@forEach
-            roomRef.child("seats").child(key).child("uid").setValue("").await()
-            roomRef.child("seats").child(key).child("muted").setValue(false).await()
+            updates["seats/$key/uid"] = ""
+            updates["seats/$key/muted"] = false
         }
+        roomRef.updateChildren(updates).await()
     }
 
     override fun observeRoomChat(roomId: String): Flow<List<SocialVoiceChatMessage>> = callbackFlow {
@@ -501,6 +504,12 @@ class FirebaseSocialVoiceRoomRepository(
         val ownerOnline = onlineUids.contains(ownerUid)
         val collapsed = snap.child("collapsed").getValue(Boolean::class.java) == true || !ownerOnline
         val onlineCount = snap.child("presence").childrenCount.toInt()
+        val dailyContribution = parseContributionMap(snap.child("contribution").child("daily"))
+        val weeklyContribution = parseContributionMap(snap.child("contribution").child("weekly"))
+        val totalContribution = parseContributionMap(snap.child("contribution").child("total"))
+        val dailySoulContribution = parseContributionMap(snap.child("contribution").child("dailySoul"))
+        val weeklySoulContribution = parseContributionMap(snap.child("contribution").child("weeklySoul"))
+        val totalSoulContribution = parseContributionMap(snap.child("contribution").child("totalSoul"))
         val seats = (1..10).map { no ->
             val seat = snap.child("seats").child(no.toString())
             val uid = seat.child("uid").getValue(String::class.java)?.takeIf { it.isNotBlank() }
@@ -529,6 +538,12 @@ class FirebaseSocialVoiceRoomRepository(
             onlineUids = onlineUids,
             seats = seats,
             onlineCount = onlineCount,
+            contributionDaily = dailyContribution,
+            contributionWeekly = weeklyContribution,
+            contributionTotal = totalContribution,
+            contributionDailySoul = dailySoulContribution,
+            contributionWeeklySoul = weeklySoulContribution,
+            contributionTotalSoul = totalSoulContribution,
         )
     }
 
@@ -605,6 +620,15 @@ class FirebaseSocialVoiceRoomRepository(
         if (value is Number) return value.toLong()
         (value as? java.lang.Number)?.let { return it.longValue() }
         return null
+    }
+
+    private fun parseContributionMap(snapshot: DataSnapshot): Map<String, Long> {
+        if (!snapshot.exists()) return emptyMap()
+        return snapshot.children.mapNotNull { child ->
+            val uid = child.key?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val points = parseLong(child.value) ?: 0L
+            uid to points
+        }.toMap()
     }
 }
 

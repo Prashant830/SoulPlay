@@ -92,6 +92,11 @@ class FirebaseGiftRepository(
                 addCoins(balanceRef, totalPrice)
                 throw e
             }
+            if (context is GiftSendContext.VoiceRoom) {
+                runCatching {
+                    incrementVoiceContribution(context.roomId, uid, totalPrice, receiverSoul)
+                }
+            }
             GiftSendResult(
                 newBalance = newBalance,
                 eventId = eventId,
@@ -263,6 +268,48 @@ class FirebaseGiftRepository(
                 }
             })
         }
+
+    private suspend fun incrementVoiceContribution(
+        roomId: String,
+        senderUid: String,
+        giftCoins: Long,
+        giftSoul: Long,
+    ) {
+        if (roomId.isBlank() || senderUid.isBlank() || giftCoins <= 0L) return
+        val roomRef = database.reference.child("voiceRooms").child(roomId).child("contribution")
+        incrementCounter(roomRef.child("daily").child(senderUid), giftCoins)
+        incrementCounter(roomRef.child("weekly").child(senderUid), giftCoins)
+        incrementCounter(roomRef.child("total").child(senderUid), giftCoins)
+        if (giftSoul > 0L) {
+            incrementCounter(roomRef.child("dailySoul").child(senderUid), giftSoul)
+            incrementCounter(roomRef.child("weeklySoul").child(senderUid), giftSoul)
+            incrementCounter(roomRef.child("totalSoul").child(senderUid), giftSoul)
+        }
+    }
+
+    private suspend fun incrementCounter(
+        ref: com.google.firebase.database.DatabaseReference,
+        delta: Long,
+    ) {
+        if (delta <= 0L) return
+        suspendCancellableCoroutine<Unit> { cont ->
+            ref.runTransaction(object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    val cur = parseLong(currentData.value) ?: 0L
+                    currentData.value = cur + delta
+                    return Transaction.success(currentData)
+                }
+
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    currentData: DataSnapshot?,
+                ) {
+                    cont.resume(Unit)
+                }
+            })
+        }
+    }
 
     override fun observeGiftEvents(context: GiftSendContext): Flow<GiftEvent> = callbackFlow {
         val ref = database.reference

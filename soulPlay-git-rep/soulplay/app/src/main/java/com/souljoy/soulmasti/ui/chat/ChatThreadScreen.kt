@@ -46,8 +46,8 @@ import com.souljoy.soulmasti.R
 import com.souljoy.soulmasti.ui.common.SoulplayChatThreadTopBar
 import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
 import com.souljoy.soulmasti.ui.common.gift.rememberGiftCelebrationQueue
-import com.souljoy.soulmasti.ui.voiceroom.GiftWallDialog
-import com.souljoy.soulmasti.ui.voiceroom.defaultGiftWallItems
+import com.souljoy.soulmasti.ui.voice.game.GiftWallDialog
+import com.souljoy.soulmasti.ui.voice.game.defaultGiftWallItems
 import kotlinx.coroutines.launch
 
 // Me = left, blue. Other user = right, gray (per product spec).

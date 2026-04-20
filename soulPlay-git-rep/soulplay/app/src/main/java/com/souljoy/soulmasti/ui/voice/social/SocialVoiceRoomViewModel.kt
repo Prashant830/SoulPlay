@@ -1,4 +1,4 @@
-package com.souljoy.soulmasti.ui.voiceroom
+package com.souljoy.soulmasti.ui.voice.social
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -7,10 +7,15 @@ import com.google.firebase.database.FirebaseDatabase
 import com.souljoy.soulmasti.BuildConfig
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.google.firebase.auth.FirebaseAuth
+import com.souljoy.soulmasti.domain.gift.GiftCatalog
+import com.souljoy.soulmasti.domain.gift.GiftEvent
+import com.souljoy.soulmasti.domain.gift.GiftSendContext
 import com.souljoy.soulmasti.domain.model.SocialSeatInvite
 import com.souljoy.soulmasti.domain.model.SocialVoiceChatMessage
 import com.souljoy.soulmasti.domain.model.SocialVoiceRoomSnapshot
 import com.souljoy.soulmasti.domain.model.VoiceConnectionState
+import com.souljoy.soulmasti.domain.repository.GiftRepository
+import com.souljoy.soulmasti.domain.repository.GiftSendResult
 import com.souljoy.soulmasti.domain.repository.SocialVoiceRoomRepository
 import com.souljoy.soulmasti.domain.repository.VoiceRoomRepository
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -27,6 +32,7 @@ class SocialVoiceRoomViewModel(
     private val repository: SocialVoiceRoomRepository,
     private val voiceRoomRepository: VoiceRoomRepository,
     private val database: FirebaseDatabase,
+    private val giftRepository: GiftRepository,
     private val roomId: String,
 ) : AndroidViewModel(application) {
     private val roomSessionStartMs = System.currentTimeMillis()
@@ -36,8 +42,14 @@ class SocialVoiceRoomViewModel(
 
     private val _messages = MutableStateFlow<List<SocialVoiceChatMessage>>(emptyList())
     val messages: StateFlow<List<SocialVoiceChatMessage>> = _messages.asStateFlow()
+    private val _giftEvents = MutableStateFlow<List<GiftEvent>>(emptyList())
+    val giftEvents: StateFlow<List<GiftEvent>> = _giftEvents.asStateFlow()
+    private val _giftFxEvents = MutableSharedFlow<GiftEvent>(extraBufferCapacity = 32)
+    val giftFxEvents: SharedFlow<GiftEvent> = _giftFxEvents.asSharedFlow()
     private val _userProfiles = MutableStateFlow<Map<String, SeatUserProfile>>(emptyMap())
     val userProfiles: StateFlow<Map<String, SeatUserProfile>> = _userProfiles.asStateFlow()
+    private val _coinBalance = MutableStateFlow<Long?>(null)
+    val coinBalance: StateFlow<Long?> = _coinBalance.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -71,7 +83,17 @@ class SocialVoiceRoomViewModel(
                     _joinTicker.tryEmit("${displayName(joinedUid)} joined")
                 }
                 preloadProfiles(
-                    (snap?.seats?.mapNotNull { it.occupantUid }.orEmpty() + onlineNow + listOfNotNull(snap?.ownerUid)).toSet(),
+                    (
+                        snap?.seats?.mapNotNull { it.occupantUid }.orEmpty() +
+                            onlineNow +
+                            listOfNotNull(snap?.ownerUid) +
+                            snap?.contributionDaily?.keys.orEmpty() +
+                            snap?.contributionWeekly?.keys.orEmpty() +
+                            snap?.contributionTotal?.keys.orEmpty() +
+                            snap?.contributionDailySoul?.keys.orEmpty() +
+                            snap?.contributionWeeklySoul?.keys.orEmpty() +
+                            snap?.contributionTotalSoul?.keys.orEmpty()
+                        ).toSet(),
                 )
                 val uid = myUid
                 if (uid != null) {
@@ -127,6 +149,18 @@ class SocialVoiceRoomViewModel(
                 }
             }
         }
+        viewModelScope.launch {
+            giftRepository.observeGiftEvents(GiftSendContext.VoiceRoom(roomId)).collect { event ->
+                val createdAt = event.createdAt ?: 0L
+                if (createdAt in 1 until roomSessionStartMs) return@collect
+                _giftEvents.value = (_giftEvents.value + event)
+                    .sortedBy { it.createdAt ?: 0L }
+                    .takeLast(100)
+                _giftFxEvents.tryEmit(event)
+                preloadProfiles(setOfNotNull(event.fromUserId, event.toUserId))
+            }
+        }
+        refreshCoinBalance()
         setPresence(true)
     }
 
@@ -189,6 +223,20 @@ class SocialVoiceRoomViewModel(
         }
     }
 
+    suspend fun sendGift(toUid: String, giftId: String, selectedCount: Int): Result<GiftSendResult> {
+        if (toUid.isBlank()) return Result.failure(IllegalArgumentException("Invalid recipient"))
+        val result = giftRepository.sendGift(
+            context = GiftSendContext.VoiceRoom(roomId),
+            giftId = giftId,
+            recipientUserId = toUid,
+            selectedCount = selectedCount,
+        )
+        result.onSuccess { sent ->
+            _coinBalance.value = sent.newBalance
+        }
+        return result
+    }
+
     fun joinAgoraVoice() {
         if (BuildConfig.AGORA_APP_ID.isBlank()) return
         val uid = myUid ?: return
@@ -244,6 +292,11 @@ class SocialVoiceRoomViewModel(
         return _userProfiles.value[safe]?.photoUrl?.takeIf { it.isNotBlank() }
     }
 
+    fun userSoul(uid: String?): Long {
+        val safe = uid?.takeIf { it.isNotBlank() } ?: return 0L
+        return _userProfiles.value[safe]?.soul ?: 0L
+    }
+
     fun updateRoomName(name: String) {
         viewModelScope.launch {
             repository.updateRoomName(roomId, name).onFailure {
@@ -282,6 +335,7 @@ class SocialVoiceRoomViewModel(
 
     private fun clearLocalRoomData() {
         _messages.value = emptyList()
+        _giftEvents.value = emptyList()
         _incomingInvite.value = null
         _room.value = _room.value?.copy(
             seats = _room.value?.seats.orEmpty().map {
@@ -304,15 +358,53 @@ class SocialVoiceRoomViewModel(
                 loaded[uid] = SeatUserProfile(
                     name = snap?.child("username")?.getValue(String::class.java)?.trim().orEmpty(),
                     photoUrl = snap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim().orEmpty(),
+                    soul = snap?.child("soul")?.getValue(Long::class.java) ?: 0L,
                 )
             }
             _userProfiles.value = known + loaded
         }
     }
+
+    private fun refreshCoinBalance() {
+        val uid = myUid ?: return
+        viewModelScope.launch {
+            val value = runCatching {
+                database.reference.child("users").child(uid).child("totalWinnings").get().await()
+            }.getOrNull()
+            _coinBalance.value = parseLong(value?.value) ?: _coinBalance.value
+        }
+    }
+
+    fun giftSummaryText(event: GiftEvent): String {
+        val giftName = GiftCatalog.displayLabel(event.giftId)
+        val sender = displayName(event.fromUserId)
+        val target = event.toUserId?.let { displayName(it) }.orEmpty()
+        return if (target.isBlank()) {
+            "$sender sent $giftName x${event.selectedCount}"
+        } else {
+            "$sender sent $target $giftName x${event.selectedCount}"
+        }
+    }
+
+    private fun parseLong(value: Any?): Long? {
+        if (value == null) return null
+        if (value is String) return value.trim().toLongOrNull()
+        if (value is Long) return value
+        if (value is Int) return value.toLong()
+        if (value is Double) return value.toLong()
+        if (value is Float) return value.toLong()
+        if (value is Number) return value.toLong()
+        (value as? java.lang.Number)?.let { return it.longValue() }
+        return null
+    }
 }
+
+private fun setOfNotNull(vararg ids: String?): Set<String> =
+    ids.filterNotNull().filter { it.isNotBlank() }.toSet()
 
 data class SeatUserProfile(
     val name: String,
     val photoUrl: String,
+    val soul: Long,
 )
 

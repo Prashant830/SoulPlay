@@ -1,4 +1,4 @@
-package com.souljoy.soulmasti.ui.voiceroom
+package com.souljoy.soulmasti.ui.voice.social
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
