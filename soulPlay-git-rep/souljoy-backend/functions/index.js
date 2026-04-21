@@ -311,6 +311,92 @@ exports.playerOffline = functions.database.onValueUpdated(
     }
 );
 
+/* =================================================
+  7️⃣ GIFT LEADERBOARDS (PROFILE + VOICE ROOM)
+================================================= */
+
+exports.aggregateGiftLeaderboards = functions.database.onValueCreated(
+    "/giftEvents/{segment}/{scopeId}/{eventId}",
+    async (event) => {
+        const segment = event.params.segment;
+        const scopeId = event.params.scopeId;
+        const eventId = event.params.eventId;
+        const gift = event.data.val() || {};
+
+        const fromUid = typeof gift.fromUserId === "string" ? gift.fromUserId.trim() : "";
+        if (!fromUid) return;
+
+        const coins = toLong(gift.coins);
+        const soul = toLong(gift.receiverSoul);
+        const createdAt = toLong(gift.createdAt) || Date.now();
+
+        // Idempotency guard for function retries.
+        const dedupeRef = admin.database().ref(`leaderboardsV1/processedGiftEvents/${eventId}`);
+        const dedupeSnap = await dedupeRef.once("value");
+        if (dedupeSnap.exists()) return;
+        await dedupeRef.set({
+            processedAt: admin.database.ServerValue.TIMESTAMP,
+            segment: segment,
+            scopeId: scopeId,
+        });
+
+        const dayKey = utcDayKey(createdAt);
+        const weekKey = utcWeekKey(createdAt);
+
+        const updates = {};
+
+        // ---------- Profile leaderboards (all gift contexts) ----------
+        updates[`leaderboardsV1/profile/daily/${dayKey}/${fromUid}/coins`] = admin.database.ServerValue.increment(coins);
+        updates[`leaderboardsV1/profile/weekly/${weekKey}/${fromUid}/coins`] = admin.database.ServerValue.increment(coins);
+        updates[`leaderboardsV1/profile/total/${fromUid}/coins`] = admin.database.ServerValue.increment(coins);
+        updates[`leaderboardsV1/profile/daily/${dayKey}/${fromUid}/soul`] = admin.database.ServerValue.increment(soul);
+        updates[`leaderboardsV1/profile/weekly/${weekKey}/${fromUid}/soul`] = admin.database.ServerValue.increment(soul);
+        updates[`leaderboardsV1/profile/total/${fromUid}/soul`] = admin.database.ServerValue.increment(soul);
+        updates[`leaderboardsV1/profile/lastGiftAt/${fromUid}`] = createdAt;
+
+        // ---------- Voice room leaderboards ----------
+        if (segment === "voice") {
+            updates[`leaderboardsV1/room/daily/${dayKey}/${scopeId}/coins`] = admin.database.ServerValue.increment(coins);
+            updates[`leaderboardsV1/room/weekly/${weekKey}/${scopeId}/coins`] = admin.database.ServerValue.increment(coins);
+            updates[`leaderboardsV1/room/total/${scopeId}/coins`] = admin.database.ServerValue.increment(coins);
+            updates[`leaderboardsV1/room/daily/${dayKey}/${scopeId}/soul`] = admin.database.ServerValue.increment(soul);
+            updates[`leaderboardsV1/room/weekly/${weekKey}/${scopeId}/soul`] = admin.database.ServerValue.increment(soul);
+            updates[`leaderboardsV1/room/total/${scopeId}/soul`] = admin.database.ServerValue.increment(soul);
+            updates[`leaderboardsV1/room/lastGiftAt/${scopeId}`] = createdAt;
+
+            // Optional room metadata snapshot for ranking cards/list items.
+            const roomSnap = await admin.database().ref(`voiceRooms/${scopeId}`).once("value");
+            const room = roomSnap.val() || {};
+            const roomName = typeof room.roomName === "string" && room.roomName.trim()
+                ? room.roomName.trim()
+                : `Room ${String(scopeId).slice(-6)}`;
+            const ownerUid = typeof room.ownerUid === "string" ? room.ownerUid : "";
+            updates[`leaderboardsV1/room/meta/${scopeId}/roomName`] = roomName;
+            updates[`leaderboardsV1/room/meta/${scopeId}/ownerUid`] = ownerUid;
+            if (ownerUid) {
+                const ownerSnap = await admin.database().ref(`users/${ownerUid}`).once("value");
+                const owner = ownerSnap.val() || {};
+                const ownerUsername = typeof owner.username === "string" ? owner.username : "";
+                const ownerPhotoUrl = pickProfilePhoto(owner);
+                updates[`leaderboardsV1/room/meta/${scopeId}/ownerUsername`] = ownerUsername;
+                updates[`leaderboardsV1/room/meta/${scopeId}/ownerPhotoUrl`] = ownerPhotoUrl;
+            }
+            updates[`leaderboardsV1/room/meta/${scopeId}/updatedAt`] = createdAt;
+        }
+
+        // Optional profile metadata snapshot.
+        const userSnap = await admin.database().ref(`users/${fromUid}`).once("value");
+        const user = userSnap.val() || {};
+        const username = typeof user.username === "string" ? user.username : "";
+        const photoUrl = pickProfilePhoto(user);
+        updates[`leaderboardsV1/profile/meta/${fromUid}/username`] = username;
+        updates[`leaderboardsV1/profile/meta/${fromUid}/photoUrl`] = photoUrl;
+        updates[`leaderboardsV1/profile/meta/${fromUid}/updatedAt`] = createdAt;
+
+        await admin.database().ref().update(updates);
+    },
+);
+
 
 /* =================================================
    6️⃣ SHUFFLE FUNCTION
@@ -321,6 +407,46 @@ function shuffleArray(array) {
         const j = Math.floor(Math.random() * (i + 1));
         [array[i], array[j]] = [array[j], array[i]];
     }
+}
+
+function toLong(value) {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === "number") return Math.trunc(value);
+    if (typeof value === "string") {
+        const n = parseInt(value.trim(), 10);
+        return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+}
+
+function utcDayKey(timestampMs) {
+    return Math.floor(timestampMs / 86400000);
+}
+
+function utcWeekKey(timestampMs) {
+    const d = new Date(timestampMs);
+    // ISO week-like key, Monday based.
+    const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return date.getUTCFullYear() * 100 + weekNo;
+}
+
+function pickProfilePhoto(user) {
+    if (!user || typeof user !== "object") return "";
+    const candidates = [
+        user.profilePictureUrl,
+        user.photoUrl,
+        user.profileImageUrl,
+        user.profilePic,
+        user.avatarUrl,
+    ];
+    for (const value of candidates) {
+        if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return "";
 }
 
 
