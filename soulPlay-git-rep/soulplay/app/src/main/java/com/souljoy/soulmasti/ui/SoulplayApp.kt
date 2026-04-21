@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
@@ -42,6 +43,10 @@ import com.souljoy.soulmasti.ui.chat.ChatViewModel
 import com.souljoy.soulmasti.ui.home.HomeMatchUiState
 import com.souljoy.soulmasti.ui.home.HomeScreen
 import com.souljoy.soulmasti.ui.home.HomeViewModel
+import com.souljoy.soulmasti.ui.league.LeagueScreen
+import com.souljoy.soulmasti.ui.league.LeagueViewModel
+import com.souljoy.soulmasti.ui.league.RewardInboxScreen
+import com.souljoy.soulmasti.ui.league.RewardInboxViewModel
 import com.souljoy.soulmasti.ui.auth.AuthGateScreen
 import com.souljoy.soulmasti.ui.auth.CreateProfileScreen
 import com.souljoy.soulmasti.ui.auth.LoginScreen
@@ -70,6 +75,7 @@ private data class BottomTab(
 
 private val bottomTabs = listOf(
     BottomTab(SoulplayDestinations.Home, "Home", Icons.Filled.Home),
+    BottomTab(SoulplayDestinations.League, "League", Icons.Filled.EmojiEvents),
     BottomTab(SoulplayDestinations.SocialVoiceHub, "Voice Room", Icons.Filled.Mic),
     BottomTab(SoulplayDestinations.Chat, "Chat", Icons.Filled.ChatBubbleOutline),
     BottomTab(SoulplayDestinations.Settings, "Profile", Icons.Filled.Person)
@@ -105,6 +111,7 @@ fun SoulplayApp(
             route.contains("create_profile") ||
             route.contains("auth_gate") ||
             route.contains("user_profile") ||
+            route.contains(SoulplayDestinations.League) ||
             route.contains(SoulplayDestinations.GoldShop)
     val showBottomBar = !hideBottomBar
 
@@ -270,6 +277,37 @@ fun SoulplayApp(
             }
             composable(SoulplayDestinations.GoldShop) {
                 GoldShopScreen(
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(SoulplayDestinations.League) {
+                val leagueVm: LeagueViewModel = koinViewModel()
+                LeagueScreen(
+                    viewModel = leagueVm,
+                    onOpenUserProfile = { uid ->
+                        if (uid.isNotBlank()) {
+                            navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
+                        }
+                    },
+                    onOpenRoom = { roomId ->
+                        if (roomId.isNotBlank()) {
+                            navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                        }
+                    },
+                    onOpenRewardInbox = {
+                        navController.navigate(SoulplayDestinations.RewardInbox) { launchSingleTop = true }
+                    },
+                    onBack = {
+                        if (!navController.popBackStack()) {
+                            navController.navigate(SoulplayDestinations.Home) { launchSingleTop = true }
+                        }
+                    },
+                )
+            }
+            composable(SoulplayDestinations.RewardInbox) {
+                val rewardVm: RewardInboxViewModel = koinViewModel()
+                RewardInboxScreen(
+                    viewModel = rewardVm,
                     onBack = { navController.popBackStack() },
                 )
             }

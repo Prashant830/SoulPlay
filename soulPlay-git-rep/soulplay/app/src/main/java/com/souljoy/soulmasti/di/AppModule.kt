@@ -22,6 +22,8 @@ import com.souljoy.soulmasti.ui.auth.LoginViewModel
 import com.souljoy.soulmasti.ui.home.HomeViewModel
 import com.souljoy.soulmasti.ui.chat.ChatThreadViewModel
 import com.souljoy.soulmasti.ui.chat.ChatViewModel
+import com.souljoy.soulmasti.ui.league.LeagueViewModel
+import com.souljoy.soulmasti.ui.league.RewardInboxViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
 import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
@@ -51,6 +53,8 @@ val appModule = module {
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }
     viewModel { SettingsViewModel(androidApplication(), get(), get(), get(), get(), get()) }
     viewModel { ChatViewModel(androidApplication(), get(), get(), get()) }
+    viewModel { LeagueViewModel(androidApplication(), get(), get()) }
+    viewModel { RewardInboxViewModel(androidApplication(), get(), get()) }
     viewModel { SocialVoiceRoomsViewModel(androidApplication(), get(), get(), get()) }
     viewModel { params ->
         ChatThreadViewModel(
