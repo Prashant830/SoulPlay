@@ -22,11 +22,16 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.util.Calendar
+import java.util.TimeZone
 
 class FirebaseSocialVoiceRoomRepository(
     private val auth: FirebaseAuth,
     private val database: FirebaseDatabase,
 ) : SocialVoiceRoomRepository {
+    private companion object {
+        const val CONTRIBUTION_SCHEMA_VERSION = 1L
+    }
 
     override fun observeMyEntitlement(): Flow<VoiceEntitlementState> = callbackFlow {
         val uid = auth.currentUser?.uid
@@ -504,12 +509,44 @@ class FirebaseSocialVoiceRoomRepository(
         val ownerOnline = onlineUids.contains(ownerUid)
         val collapsed = snap.child("collapsed").getValue(Boolean::class.java) == true || !ownerOnline
         val onlineCount = snap.child("presence").childrenCount.toInt()
-        val dailyContribution = parseContributionMap(snap.child("contribution").child("daily"))
-        val weeklyContribution = parseContributionMap(snap.child("contribution").child("weekly"))
-        val totalContribution = parseContributionMap(snap.child("contribution").child("total"))
-        val dailySoulContribution = parseContributionMap(snap.child("contribution").child("dailySoul"))
-        val weeklySoulContribution = parseContributionMap(snap.child("contribution").child("weeklySoul"))
-        val totalSoulContribution = parseContributionMap(snap.child("contribution").child("totalSoul"))
+        val nowMs = System.currentTimeMillis()
+        val currentDailyKey = utcDayKey(nowMs)
+        val currentWeeklyKey = utcWeekKey(nowMs)
+        val contributionSnap = snap.child("contribution")
+        val schemaVersion = parseLong(contributionSnap.child("schemaVersion").value) ?: 0L
+        val storedDailyKey = parseLong(contributionSnap.child("dailyKey").value) ?: -1L
+        val storedWeeklyKey = parseLong(contributionSnap.child("weeklyKey").value) ?: -1L
+
+        val dailyContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION && storedDailyKey == currentDailyKey) {
+            parseContributionMap(contributionSnap.child("daily"))
+        } else {
+            emptyMap()
+        }
+        val weeklyContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION && storedWeeklyKey == currentWeeklyKey) {
+            parseContributionMap(contributionSnap.child("weekly"))
+        } else {
+            emptyMap()
+        }
+        val totalContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION) {
+            parseContributionMap(contributionSnap.child("total"))
+        } else {
+            emptyMap()
+        }
+        val dailySoulContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION && storedDailyKey == currentDailyKey) {
+            parseContributionMap(contributionSnap.child("dailySoul"))
+        } else {
+            emptyMap()
+        }
+        val weeklySoulContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION && storedWeeklyKey == currentWeeklyKey) {
+            parseContributionMap(contributionSnap.child("weeklySoul"))
+        } else {
+            emptyMap()
+        }
+        val totalSoulContribution = if (schemaVersion == CONTRIBUTION_SCHEMA_VERSION) {
+            parseContributionMap(contributionSnap.child("totalSoul"))
+        } else {
+            emptyMap()
+        }
         val seats = (1..10).map { no ->
             val seat = snap.child("seats").child(no.toString())
             val uid = seat.child("uid").getValue(String::class.java)?.takeIf { it.isNotBlank() }
@@ -629,6 +666,18 @@ class FirebaseSocialVoiceRoomRepository(
             val points = parseLong(child.value) ?: 0L
             uid to points
         }.toMap()
+    }
+
+    private fun utcDayKey(timestampMs: Long): Long = timestampMs / 86_400_000L
+
+    private fun utcWeekKey(timestampMs: Long): Long {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.firstDayOfWeek = Calendar.MONDAY
+        cal.minimalDaysInFirstWeek = 4
+        cal.timeInMillis = timestampMs
+        val year = cal.get(Calendar.YEAR).toLong()
+        val weekOfYear = cal.get(Calendar.WEEK_OF_YEAR).toLong()
+        return year * 100L + weekOfYear
     }
 }
 

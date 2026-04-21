@@ -20,12 +20,17 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import java.util.Calendar
+import java.util.TimeZone
 import java.util.concurrent.ThreadLocalRandom
 
 class FirebaseGiftRepository(
     private val auth: FirebaseAuth,
     private val database: FirebaseDatabase,
 ) : GiftRepository {
+    private companion object {
+        const val CONTRIBUTION_SCHEMA_VERSION = 1L
+    }
 
     override suspend fun sendGift(
         context: GiftSendContext,
@@ -277,14 +282,78 @@ class FirebaseGiftRepository(
     ) {
         if (roomId.isBlank() || senderUid.isBlank() || giftCoins <= 0L) return
         val roomRef = database.reference.child("voiceRooms").child(roomId).child("contribution")
-        incrementCounter(roomRef.child("daily").child(senderUid), giftCoins)
-        incrementCounter(roomRef.child("weekly").child(senderUid), giftCoins)
-        incrementCounter(roomRef.child("total").child(senderUid), giftCoins)
-        if (giftSoul > 0L) {
-            incrementCounter(roomRef.child("dailySoul").child(senderUid), giftSoul)
-            incrementCounter(roomRef.child("weeklySoul").child(senderUid), giftSoul)
-            incrementCounter(roomRef.child("totalSoul").child(senderUid), giftSoul)
+        val nowMs = System.currentTimeMillis()
+        val todayKey = utcDayKey(nowMs)
+        val weekKey = utcWeekKey(nowMs)
+        suspendCancellableCoroutine<Unit> { cont ->
+            roomRef.runTransaction(object : Transaction.Handler {
+                override fun doTransaction(currentData: MutableData): Transaction.Result {
+                    val schemaVersion = parseLong(currentData.child("schemaVersion").value) ?: 0L
+                    val currentDailyKey = parseLong(currentData.child("dailyKey").value) ?: -1L
+                    val currentWeeklyKey = parseLong(currentData.child("weeklyKey").value) ?: -1L
+
+                    if (schemaVersion != CONTRIBUTION_SCHEMA_VERSION) {
+                        currentData.child("daily").value = null
+                        currentData.child("weekly").value = null
+                        currentData.child("total").value = null
+                        currentData.child("dailySoul").value = null
+                        currentData.child("weeklySoul").value = null
+                        currentData.child("totalSoul").value = null
+                        currentData.child("schemaVersion").value = CONTRIBUTION_SCHEMA_VERSION
+                    }
+
+                    if (currentDailyKey != todayKey) {
+                        currentData.child("daily").value = null
+                        currentData.child("dailySoul").value = null
+                        currentData.child("dailyKey").value = todayKey
+                    }
+                    if (currentWeeklyKey != weekKey) {
+                        currentData.child("weekly").value = null
+                        currentData.child("weeklySoul").value = null
+                        currentData.child("weeklyKey").value = weekKey
+                    }
+
+                    val dailyCoins = parseLong(currentData.child("daily").child(senderUid).value) ?: 0L
+                    currentData.child("daily").child(senderUid).value = dailyCoins + giftCoins
+                    val weeklyCoins = parseLong(currentData.child("weekly").child(senderUid).value) ?: 0L
+                    currentData.child("weekly").child(senderUid).value = weeklyCoins + giftCoins
+                    val totalCoins = parseLong(currentData.child("total").child(senderUid).value) ?: 0L
+                    currentData.child("total").child(senderUid).value = totalCoins + giftCoins
+
+                    if (giftSoul > 0L) {
+                        val dailySoul = parseLong(currentData.child("dailySoul").child(senderUid).value) ?: 0L
+                        currentData.child("dailySoul").child(senderUid).value = dailySoul + giftSoul
+                        val weeklySoul = parseLong(currentData.child("weeklySoul").child(senderUid).value) ?: 0L
+                        currentData.child("weeklySoul").child(senderUid).value = weeklySoul + giftSoul
+                        val totalSoul = parseLong(currentData.child("totalSoul").child(senderUid).value) ?: 0L
+                        currentData.child("totalSoul").child(senderUid).value = totalSoul + giftSoul
+                    }
+
+                    currentData.child("lastGiftAt").value = nowMs
+                    return Transaction.success(currentData)
+                }
+
+                override fun onComplete(
+                    error: DatabaseError?,
+                    committed: Boolean,
+                    currentData: DataSnapshot?,
+                ) {
+                    cont.resume(Unit)
+                }
+            })
         }
+    }
+
+    private fun utcDayKey(timestampMs: Long): Long = timestampMs / 86_400_000L
+
+    private fun utcWeekKey(timestampMs: Long): Long {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        cal.firstDayOfWeek = Calendar.MONDAY
+        cal.minimalDaysInFirstWeek = 4
+        cal.timeInMillis = timestampMs
+        val year = cal.get(Calendar.YEAR).toLong()
+        val weekOfYear = cal.get(Calendar.WEEK_OF_YEAR).toLong()
+        return year * 100L + weekOfYear
     }
 
     private suspend fun incrementCounter(
