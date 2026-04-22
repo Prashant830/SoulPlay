@@ -84,6 +84,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             roomId = params.get(),
         )
     }

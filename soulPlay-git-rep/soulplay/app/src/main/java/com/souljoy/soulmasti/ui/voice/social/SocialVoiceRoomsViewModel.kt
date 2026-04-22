@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
+import kotlinx.coroutines.tasks.await
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.model.SocialVoiceRoomSnapshot
 import com.souljoy.soulmasti.domain.model.VoiceEntitlementState
@@ -41,6 +42,8 @@ class SocialVoiceRoomsViewModel(
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
+    private val _joinConfirm = MutableStateFlow<JoinRoomConfirmUi?>(null)
+    val joinConfirm: StateFlow<JoinRoomConfirmUi?> = _joinConfirm.asStateFlow()
     private val trackedFriendUids = mutableSetOf<String>()
     private val userRefs = mutableMapOf<String, com.google.firebase.database.DatabaseReference>()
     private val roomRefs = mutableMapOf<String, com.google.firebase.database.DatabaseReference>()
@@ -89,9 +92,45 @@ class SocialVoiceRoomsViewModel(
 
     fun openFriendRoom(friendUid: String, onSuccess: () -> Unit) {
         viewModelScope.launch {
+            val uid = requireUid()
+            val currentRoomId = runCatching {
+                database.reference.child("users").child(uid).child("currentSocialRoomId").get().await()
+                    .getValue(String::class.java).orEmpty()
+            }.getOrDefault("")
+            if (currentRoomId.isNotBlank() && currentRoomId != friendUid) {
+                _joinConfirm.value = JoinRoomConfirmUi(
+                    targetRoomId = friendUid,
+                    oldRoomId = currentRoomId,
+                )
+                return@launch
+            }
             val result = socialVoiceRoomRepository.enterFriendRoom(friendUid)
             result.onFailure { _error.value = it.message ?: "Could not enter friend room" }
             result.onSuccess { onSuccess() }
+        }
+    }
+
+    fun dismissJoinConfirm() {
+        _joinConfirm.value = null
+    }
+
+    fun confirmSwitchAndJoin(onSuccess: (String) -> Unit) {
+        val prompt = _joinConfirm.value ?: return
+        viewModelScope.launch {
+            val uid = requireUid()
+            if (prompt.oldRoomId.isNotBlank() && prompt.oldRoomId != prompt.targetRoomId) {
+                runCatching { socialVoiceRoomRepository.setRoomPresence(prompt.oldRoomId, false) }
+            }
+            val result = socialVoiceRoomRepository.enterFriendRoom(prompt.targetRoomId)
+            result.onFailure { _error.value = it.message ?: "Could not switch room" }
+            result.onSuccess {
+                _joinConfirm.value = null
+                onSuccess(prompt.targetRoomId)
+                runCatching {
+                    database.reference.child("users").child(uid).child("currentSocialRoomId")
+                        .setValue(prompt.targetRoomId).await()
+                }
+            }
         }
     }
 
@@ -184,5 +223,10 @@ data class FriendRoomCardUi(
     val ownerPhoto: String?,
     val onlineCount: Int,
     val exists: Boolean,
+)
+
+data class JoinRoomConfirmUi(
+    val targetRoomId: String,
+    val oldRoomId: String,
 )
 

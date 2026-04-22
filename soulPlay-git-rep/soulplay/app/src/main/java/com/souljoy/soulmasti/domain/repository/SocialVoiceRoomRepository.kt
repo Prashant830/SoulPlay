@@ -47,6 +47,10 @@ interface SocialVoiceRoomRepository {
 
     suspend fun updateRoomName(roomId: String, roomName: String): Result<Unit>
 
+    suspend fun updateRoomCoverUrl(roomId: String, coverUrl: String): Result<Unit>
+
+    suspend fun updateRoomBackgroundName(roomId: String, backgroundName: String): Result<Unit>
+
     suspend fun collapseRoomIfOwnerLeft(roomId: String): Result<Unit>
 
     fun observeRoomChat(roomId: String): Flow<List<SocialVoiceChatMessage>>

@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
@@ -354,7 +355,14 @@ private fun RoomRankingList(
                             .background(Color(0xFFEDE9FE)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (row.ownerPhotoUrl.isNotBlank()) {
+                        if (row.roomImageUrl.isNotBlank()) {
+                            AsyncImage(
+                                model = row.roomImageUrl,
+                                contentDescription = "Room image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                            )
+                        } else if (row.ownerPhotoUrl.isNotBlank()) {
                             AsyncImage(
                                 model = row.ownerPhotoUrl,
                                 contentDescription = "Owner profile",
@@ -366,7 +374,15 @@ private fun RoomRankingList(
                         }
                     }
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(row.roomName.ifBlank { "Room ${row.roomId.takeLast(6)}" }, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(
+                                imageVector = Icons.Filled.MeetingRoom,
+                                contentDescription = null,
+                                tint = Color(0xFF6B7280),
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(row.roomName.ifBlank { "Room ${row.roomId.takeLast(6)}" }, fontWeight = FontWeight.SemiBold)
+                        }
                         Text("ID: ${row.roomId.takeLast(6)}", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.labelSmall)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {

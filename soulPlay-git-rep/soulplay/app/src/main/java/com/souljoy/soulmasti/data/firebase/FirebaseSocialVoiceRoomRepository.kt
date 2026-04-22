@@ -125,9 +125,11 @@ class FirebaseSocialVoiceRoomRepository(
         if (roomId.isBlank()) return@runCatching
         val roomRef = database.reference.child("voiceRooms").child(roomId)
         val ref = roomRef.child("presence").child(uid)
+        val currentRoomRef = database.reference.child("users").child(uid).child("currentSocialRoomId")
         if (online) {
             ref.setValue(true).await()
             ref.onDisconnect().removeValue()
+            currentRoomRef.setValue(roomId).await()
             val ownerUid = roomRef.child("ownerUid").get().await().getValue(String::class.java).orEmpty()
             if (ownerUid == uid) {
                 roomRef.child("collapsed").setValue(false).await()
@@ -137,6 +139,8 @@ class FirebaseSocialVoiceRoomRepository(
             }
         } else {
             ref.removeValue().await()
+            val current = currentRoomRef.get().await().getValue(String::class.java).orEmpty()
+            if (current == roomId) currentRoomRef.removeValue().await()
         }
     }
 
@@ -412,7 +416,7 @@ class FirebaseSocialVoiceRoomRepository(
 
     override suspend fun updateRoomName(roomId: String, roomName: String): Result<Unit> = runCatching {
         val uid = requireUid()
-        val trimmed = roomName.trim().take(40)
+        val trimmed = roomName.trim().take(8)
         if (roomId.isBlank() || trimmed.isBlank()) error("Invalid room name")
         val roomRef = database.reference.child("voiceRooms").child(roomId)
         val roomSnap = roomRef.get().await()
@@ -420,6 +424,30 @@ class FirebaseSocialVoiceRoomRepository(
         val isInRoomPresence = roomSnap.child("presence").hasChild(uid)
         if (!isInRoomPresence) error("Only room members can rename")
         roomRef.child("roomName").setValue(trimmed).await()
+    }
+
+    override suspend fun updateRoomCoverUrl(roomId: String, coverUrl: String): Result<Unit> = runCatching {
+        val uid = requireUid()
+        val safeUrl = coverUrl.trim()
+        if (roomId.isBlank() || safeUrl.isBlank()) error("Invalid cover")
+        val roomRef = database.reference.child("voiceRooms").child(roomId)
+        val roomSnap = roomRef.get().await()
+        if (!roomSnap.exists()) error("Room not found")
+        val ownerUid = roomSnap.child("ownerUid").getValue(String::class.java).orEmpty()
+        if (uid != ownerUid) error("Only owner can change cover")
+        roomRef.child("roomCoverUrl").setValue(safeUrl).await()
+    }
+
+    override suspend fun updateRoomBackgroundName(roomId: String, backgroundName: String): Result<Unit> = runCatching {
+        val uid = requireUid()
+        val safeName = backgroundName.trim()
+        if (roomId.isBlank() || safeName.isBlank()) error("Invalid background")
+        val roomRef = database.reference.child("voiceRooms").child(roomId)
+        val roomSnap = roomRef.get().await()
+        if (!roomSnap.exists()) error("Room not found")
+        val ownerUid = roomSnap.child("ownerUid").getValue(String::class.java).orEmpty()
+        if (uid != ownerUid) error("Only owner can change background")
+        roomRef.child("roomBackgroundName").setValue(safeName).await()
     }
 
     override suspend fun collapseRoomIfOwnerLeft(roomId: String): Result<Unit> = runCatching {
@@ -568,6 +596,8 @@ class FirebaseSocialVoiceRoomRepository(
         return SocialVoiceRoomSnapshot(
             roomId = roomId,
             roomName = roomName,
+            roomCoverUrl = snap.child("roomCoverUrl").getValue(String::class.java).orEmpty(),
+            roomBackgroundName = snap.child("roomBackgroundName").getValue(String::class.java).orEmpty(),
             ownerUid = ownerUid,
             ownerOnline = ownerOnline,
             collapsed = collapsed,

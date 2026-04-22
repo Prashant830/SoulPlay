@@ -1,11 +1,15 @@
 package com.souljoy.soulmasti.ui.voice.social
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.storage.FirebaseStorage
 import com.souljoy.soulmasti.BuildConfig
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
+import com.souljoy.soulmasti.data.firebase.ProfilePhotoStorage
+import com.souljoy.soulmasti.data.firebase.profilePhotoUploadMessage
 import com.google.firebase.auth.FirebaseAuth
 import com.souljoy.soulmasti.domain.gift.GiftCatalog
 import com.souljoy.soulmasti.domain.gift.GiftEvent
@@ -32,6 +36,7 @@ class SocialVoiceRoomViewModel(
     private val repository: SocialVoiceRoomRepository,
     private val voiceRoomRepository: VoiceRoomRepository,
     private val database: FirebaseDatabase,
+    private val storage: FirebaseStorage,
     private val giftRepository: GiftRepository,
     private val roomId: String,
 ) : AndroidViewModel(application) {
@@ -303,6 +308,41 @@ class SocialVoiceRoomViewModel(
                 _error.value = it.message ?: "Could not update room name"
             }.onSuccess {
                 _toastEvents.tryEmit("Room name updated")
+            }
+        }
+    }
+
+    fun uploadRoomCover(uri: Uri) {
+        viewModelScope.launch {
+            val uid = myUid ?: run {
+                _error.value = "Sign in required"
+                return@launch
+            }
+            runCatching {
+                ProfilePhotoStorage.uploadAvatarAndGetDownloadUrl(
+                    storage = storage,
+                    uid = "${uid}_room_$roomId",
+                    uri = uri,
+                    contentResolver = getApplication<Application>().contentResolver,
+                )
+            }.onFailure {
+                _error.value = it.profilePhotoUploadMessage()
+            }.onSuccess { downloadUrl ->
+                repository.updateRoomCoverUrl(roomId, downloadUrl).onFailure { saveErr ->
+                    _error.value = saveErr.message ?: "Could not update room cover"
+                }.onSuccess {
+                    _toastEvents.tryEmit("Room cover updated")
+                }
+            }
+        }
+    }
+
+    fun updateRoomBackgroundName(backgroundName: String) {
+        viewModelScope.launch {
+            repository.updateRoomBackgroundName(roomId, backgroundName).onFailure {
+                _error.value = it.message ?: "Could not update room background"
+            }.onSuccess {
+                _toastEvents.tryEmit("Room background updated")
             }
         }
     }

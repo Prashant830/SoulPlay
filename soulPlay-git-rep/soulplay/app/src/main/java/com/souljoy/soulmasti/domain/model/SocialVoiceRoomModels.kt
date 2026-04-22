@@ -18,6 +18,8 @@ enum class SeatRole {
 data class SocialVoiceRoomSnapshot(
     val roomId: String,
     val roomName: String,
+    val roomCoverUrl: String,
+    val roomBackgroundName: String,
     val ownerUid: String,
     val ownerOnline: Boolean,
     val collapsed: Boolean,

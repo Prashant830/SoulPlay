@@ -34,6 +34,7 @@ data class LeagueRoomRow(
     val roomId: String,
     val soul: Long,
     val roomName: String = "",
+    val roomImageUrl: String = "",
     val ownerPhotoUrl: String = "",
 )
 
@@ -186,10 +187,16 @@ class LeagueViewModel(
 
     private suspend fun enrichRooms(rows: List<LeagueRoomRow>): List<LeagueRoomRow> {
         if (rows.isEmpty()) return rows
-        val roomMeta = mutableMapOf<String, Pair<String, String>>()
+        data class RoomMeta(
+            val roomName: String,
+            val roomImageUrl: String,
+            val ownerPhotoUrl: String,
+        )
+        val roomMeta = mutableMapOf<String, RoomMeta>()
         rows.map { it.roomId }.distinct().forEach { roomId ->
             val snap = runCatching { database.reference.child("voiceRooms").child(roomId).get().await() }.getOrNull()
             val roomName = snap?.child("roomName")?.getValue(String::class.java).orEmpty().ifBlank { "Room ${roomId.takeLast(6)}" }
+            val roomCover = snap?.child("roomCoverUrl")?.getValue(String::class.java).orEmpty()
             val ownerUid = snap?.child("ownerUid")?.getValue(String::class.java).orEmpty()
             val ownerPhoto = if (ownerUid.isNotBlank()) {
                 val ownerSnap = runCatching { database.reference.child("users").child(ownerUid).get().await() }.getOrNull()
@@ -197,13 +204,18 @@ class LeagueViewModel(
             } else {
                 ""
             }
-            roomMeta[roomId] = roomName to ownerPhoto
+            roomMeta[roomId] = RoomMeta(
+                roomName = roomName,
+                roomImageUrl = roomCover,
+                ownerPhotoUrl = ownerPhoto,
+            )
         }
         return rows.map {
             val meta = roomMeta[it.roomId]
             it.copy(
-                roomName = meta?.first.orEmpty(),
-                ownerPhotoUrl = meta?.second.orEmpty(),
+                roomName = meta?.roomName.orEmpty(),
+                roomImageUrl = meta?.roomImageUrl.orEmpty(),
+                ownerPhotoUrl = meta?.ownerPhotoUrl.orEmpty(),
             )
         }
     }

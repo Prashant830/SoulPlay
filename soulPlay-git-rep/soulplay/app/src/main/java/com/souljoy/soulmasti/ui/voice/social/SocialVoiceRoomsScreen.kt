@@ -55,6 +55,7 @@ fun SocialVoiceRoomsScreen(
     val myRoom by viewModel.myRoom.collectAsStateWithLifecycle()
     val friendRooms by viewModel.friendRooms.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val joinConfirm by viewModel.joinConfirm.collectAsStateWithLifecycle()
     var tab by remember { mutableStateOf(0) }
     var showRoomPurchaseConfirm by remember { mutableStateOf(false) }
     var showVipPurchaseConfirm by remember { mutableStateOf(false) }
@@ -253,6 +254,28 @@ fun SocialVoiceRoomsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showVipPurchaseConfirm = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    joinConfirm?.let { prompt ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissJoinConfirm() },
+            title = { Text("Switch room?") },
+            text = {
+                Text(
+                    "You are already in another voice room. If you join this group, your old room will be left. Continue?",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.confirmSwitchAndJoin { roomId ->
+                        onOpenRoom(roomId)
+                    }
+                }) { Text("Yes") }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissJoinConfirm() }) { Text("No") }
             },
         )
     }

@@ -1,13 +1,25 @@
 package com.souljoy.soulmasti.ui.voice.social
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +28,7 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -35,22 +48,29 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CardGiftcard
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -58,6 +78,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -67,10 +88,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -85,6 +108,7 @@ import com.souljoy.soulmasti.R
 import coil.compose.AsyncImage
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
 import com.souljoy.soulmasti.domain.gift.GiftEvent
+import com.souljoy.soulmasti.domain.model.SeatRole
 import com.souljoy.soulmasti.ui.common.SpeakingWaveRings
 import com.souljoy.soulmasti.ui.common.soulBadgeIconForSoul
 import com.souljoy.soulmasti.ui.common.gift.GiftCelebrationOverlayHost
@@ -113,6 +137,11 @@ fun SocialVoiceRoomScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val pickRoomCoverPhoto = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) viewModel.uploadRoomCover(uri)
+    }
     val room by viewModel.room.collectAsStateWithLifecycle()
     val messages by viewModel.messages.collectAsStateWithLifecycle()
     val giftEvents by viewModel.giftEvents.collectAsStateWithLifecycle()
@@ -132,6 +161,17 @@ fun SocialVoiceRoomScreen(
     var joinTickerText by remember { mutableStateOf<String?>(null) }
     var showRenameRoomDialog by remember { mutableStateOf(false) }
     var renameDraft by remember { mutableStateOf("") }
+    var showRoomSettingsSheet by remember { mutableStateOf(false) }
+    var showRoomInfoSheet by remember { mutableStateOf(false) }
+    var showRoomLevelSheet by remember { mutableStateOf(false) }
+    var showRoomBackgroundSheet by remember { mutableStateOf(false) }
+    var roomBackgroundPreviewTarget by remember { mutableStateOf<String?>(null) }
+    var highQualityEnabled by remember { mutableStateOf(true) }
+    var banTextChat by remember { mutableStateOf(false) }
+    var banPhotoChat by remember { mutableStateOf(false) }
+    var banRedPacket by remember { mutableStateOf(false) }
+    var passwordEnabled by remember { mutableStateOf(false) }
+    var manageEventEnabled by remember { mutableStateOf(false) }
     var profileDialogSeatNo by remember { mutableStateOf<Int?>(null) }
     var showContributorsDialog by remember { mutableStateOf(false) }
     var roomInfoTab by remember { mutableStateOf(RoomInfoTab.Contribution) }
@@ -162,6 +202,7 @@ fun SocialVoiceRoomScreen(
 
     val seats = room?.seats.orEmpty()
     val amOwnerOrAdmin = myUid != null && (myUid == room?.ownerUid || room?.adminUids?.contains(myUid) == true)
+    val isOwnRoom = myUid != null && myUid == room?.ownerUid
     val roomActive = room?.ownerOnline == true && room?.collapsed != true
     val seatByNo = remember(seats) { seats.associateBy { it.seatNo } }
     val onlineUsers = remember(room, seats) {
@@ -174,6 +215,14 @@ fun SocialVoiceRoomScreen(
             .sorted()
     }
     val onlineCountDisplay = maxOf(room?.onlineCount ?: 0, onlineUsers.size, participants.size)
+    val totalRoomSoul = room?.contributionTotalSoul.orEmpty().values.sum()
+    val liveRoomLevel = roomLevelForSoul(totalRoomSoul)
+    val savedBackgroundOption =
+        roomBackgroundOptionForName(room?.roomBackgroundName)
+            ?.takeIf { liveRoomLevel >= it.unlockLevel }
+    val freeBackgroundOption = RoomBackgroundOptions.firstOrNull { it.name.equals("Free", ignoreCase = true) } ?: RoomBackgroundOptions.first()
+    val activeBackgroundOption = savedBackgroundOption ?: freeBackgroundOption
+    val liveRoomBackgroundColors = activeBackgroundOption.colors
     val topContributors = remember(room) {
         room?.contributionTotalSoul
             .orEmpty()
@@ -184,11 +233,11 @@ fun SocialVoiceRoomScreen(
     val todayContributorCount = remember(room) {
         room?.contributionDailySoul.orEmpty().count { it.value > 0L }
     }
-    val chatFeed = remember(messages, giftEvents) {
-        (
+    val chatFeed: List<ChatFeedItem> = remember(messages, giftEvents) {
+        val merged: List<ChatFeedItem> =
             messages.map { ChatFeedItem.TextMessage(it) } +
                 giftEvents.map { ChatFeedItem.GiftMessage(it) }
-            ).sortedBy { it.timestamp }
+        merged.sortedBy { it.timestamp }
     }
     LaunchedEffect(chatFeed.size) {
         if (chatFeed.isNotEmpty()) {
@@ -236,10 +285,12 @@ fun SocialVoiceRoomScreen(
             .fillMaxSize()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = SocialVoiceRoomGradientColors,
+                    colors = liveRoomBackgroundColors,
                 ),
             ),
     ) {
+        PremiumBackgroundEffects(level = liveRoomLevel, backgroundTier = activeBackgroundOption.unlockLevel)
+
         // Decorative neon glow blobs similar to reference.
         Box(
             modifier = Modifier
@@ -281,23 +332,18 @@ fun SocialVoiceRoomScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                    val canRenameRoom = myUid != null && myUid == room?.ownerUid
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onBack) {
                             Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
                         }
-                        Column {
+                        Column(
+                            modifier = Modifier.clickable { showRoomInfoSheet = true },
+                        ) {
                             Text(
                                 text = room?.roomName ?: "music ♪",
                                 color = Color.White,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                modifier = if (canRenameRoom) {
-                                    Modifier.clickable {
-                                        renameDraft = room?.roomName ?: ""
-                                        showRenameRoomDialog = true
-                                    }
-                                } else Modifier,
                             )
                             Text(
                                 text = "Id: ${room?.roomId?.takeLast(6) ?: viewModel.currentRoomId.takeLast(6)}",
@@ -387,15 +433,6 @@ fun SocialVoiceRoomScreen(
                                     imageVector = Icons.Filled.MoreVert,
                                     contentDescription = "Room menu",
                                     tint = Color.White,
-                                )
-                            }
-                            DropdownMenu(expanded = showRoomMenu, onDismissRequest = { showRoomMenu = false }) {
-                                DropdownMenuItem(
-                                    text = { Text("Leave Room") },
-                                    onClick = {
-                                        showRoomMenu = false
-                                        viewModel.leaveRoom(onDone = onBack)
-                                    },
                                 )
                             }
                         }
@@ -882,6 +919,32 @@ fun SocialVoiceRoomScreen(
         )
     }
 
+        if (showRoomMenu) {
+            val menuItems = buildList {
+                add(
+                    RoomMenuAction("Invite Friends", Icons.Filled.SupervisorAccount) {
+                        viewModel.showInfo("Invite friends coming soon")
+                    },
+                )
+                if (isOwnRoom) {
+                    add(RoomMenuAction("Add Music", Icons.Filled.MusicNote) { viewModel.showInfo("Music coming soon") })
+                }
+                add(RoomMenuAction("Report Room", Icons.Filled.Info) { viewModel.showInfo("Report room coming soon") })
+                if (isOwnRoom) {
+                    add(RoomMenuAction("Settings", Icons.Filled.Settings) { showRoomSettingsSheet = true })
+                }
+                add(RoomMenuAction("Exit", Icons.Filled.ExitToApp) { viewModel.leaveRoom(onDone = onBack) })
+            }
+            RoomFunctionMenuOverlay(
+                actions = menuItems,
+                onDismiss = { showRoomMenu = false },
+                onAction = { action ->
+                    showRoomMenu = false
+                    action.onClick()
+                },
+            )
+        }
+
     if (showRenameRoomDialog) {
         AlertDialog(
             onDismissRequest = { showRenameRoomDialog = false },
@@ -889,9 +952,9 @@ fun SocialVoiceRoomScreen(
             text = {
                 OutlinedTextField(
                     value = renameDraft,
-                    onValueChange = { renameDraft = it.take(40) },
+                    onValueChange = { renameDraft = it.take(8) },
                     singleLine = true,
-                    placeholder = { Text("Enter room name") },
+                    placeholder = { Text("Enter room name (max 8)") },
                 )
             },
             confirmButton = {
@@ -904,6 +967,431 @@ fun SocialVoiceRoomScreen(
                 TextButton(onClick = { showRenameRoomDialog = false }) { Text("Cancel") }
             },
         )
+    }
+
+    if (showRoomInfoSheet) {
+        val roomName = room?.roomName.orEmpty().ifBlank { "music" }
+        val roomIdShort = room?.roomId?.takeLast(6) ?: viewModel.currentRoomId.takeLast(6)
+        val totalSoul = room?.contributionTotalSoul.orEmpty().values.sum()
+        val previewPeople = remember(room, onlineUsers) {
+            val owner = listOfNotNull(room?.ownerUid)
+            val online = onlineUsers
+            val seated = room?.seats.orEmpty().mapNotNull { it.occupantUid }
+            (owner + online + seated).filter { it.isNotBlank() }.distinct().take(4)
+        }
+        val contributorCount = room?.contributionTotalSoul.orEmpty().count { it.value > 0L }
+        val roomLevel = roomLevelForSoul(totalSoul)
+        ModalBottomSheet(onDismissRequest = { showRoomInfoSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(110.dp)
+                                    .height(120.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFFE2E8F0)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                val coverUrl = room?.roomCoverUrl?.takeIf { it.isNotBlank() }
+                                if (!coverUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = coverUrl,
+                                        contentDescription = "Room cover",
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                } else {
+                                    Text(roomName.take(1).uppercase(), color = Color(0xFF334155), fontWeight = FontWeight.Bold)
+                                }
+                            }
+                            Column(
+                                horizontalAlignment = Alignment.End,
+                                verticalArrangement = Arrangement.spacedBy(14.dp),
+                            ) {
+                                if (isOwnRoom) {
+                                    IconButton(onClick = {
+                                        showRoomInfoSheet = false
+                                        showRoomSettingsSheet = true
+                                    }) {
+                                        Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Color(0xFF475569))
+                                    }
+                                }
+                                Image(
+                                    painter = painterResource(id = roomLevelIconRes(roomLevel)),
+                                    contentDescription = "Room Level",
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .clickable { showRoomLevelSheet = true },
+                                )
+                                Text(
+                                    text = roomLevelLabel(roomLevel),
+                                    color = Color(0xFF6B7280),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(roomName, color = Color(0xFF111827), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                                Text("Friends   Advanced Room  ID:$roomIdShort", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        if (previewPeople.isNotEmpty()) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                previewPeople.forEach { uid ->
+                                    val photo = viewModel.profileImageUrl(uid)
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(Color(0xFFE2E8F0)),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            if (!photo.isNullOrBlank()) {
+                                                AsyncImage(
+                                                    model = photo,
+                                                    contentDescription = "Member",
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentScale = ContentScale.Crop,
+                                                )
+                                            } else {
+                                                Text(viewModel.displayName(uid).take(1).uppercase(), color = Color(0xFF334155))
+                                            }
+                                        }
+                                        Text(
+                                            viewModel.displayName(uid).take(10),
+                                            color = Color(0xFF374151),
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                        Text(
+                                            if (uid == room?.ownerUid) "Owner" else "Member",
+                                            color = if (uid == room?.ownerUid) Color(0xFFCA8A04) else Color(0xFF2563EB),
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                            InfoMetricCard("Online", onlineCountDisplay.toString(), Color(0xFF16A34A), Modifier.weight(1f))
+                            InfoMetricCard("Contributors", contributorCount.toString(), Color(0xFFA16207), Modifier.weight(1f))
+                        }
+                    }
+                }
+                TextButton(onClick = { showRoomInfoSheet = false }, modifier = Modifier.align(Alignment.End)) {
+                    Text("Close")
+                }
+            }
+        }
+    }
+
+    if (showRoomSettingsSheet) {
+        val ownerPhoto = viewModel.profileImageUrl(room?.ownerUid)
+        val roomCoverUrl = room?.roomCoverUrl?.takeIf { it.isNotBlank() }
+        ModalBottomSheet(onDismissRequest = { showRoomSettingsSheet = false }) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    "Settings",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center,
+                )
+                SettingsGroupCard {
+                    SettingsArrowRow(
+                        label = "Title",
+                        value = room?.roomName.orEmpty().ifBlank { "room" },
+                        onClick = {
+                            renameDraft = room?.roomName.orEmpty()
+                            showRoomSettingsSheet = false
+                            showRenameRoomDialog = true
+                        },
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                    SettingsCoverRow(
+                        coverUrl = roomCoverUrl,
+                        fallbackPhoto = ownerPhoto,
+                        fallbackInitial = (room?.roomName ?: "R").take(1).uppercase(),
+                        onClick = {
+                            if (!isOwnRoom) {
+                                viewModel.showInfo("Only owner can change cover")
+                            } else {
+                                pickRoomCoverPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
+                        },
+                    )
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                    SettingsArrowRow("Announcement", "It is a voice room", onClick = {})
+                    HorizontalDivider(color = Color(0xFFF1F5F9))
+                    SettingsArrowRow(
+                        "Voice Info Detail Preview",
+                        "Preview",
+                        onClick = {
+                            showRoomSettingsSheet = false
+                            showRoomInfoSheet = true
+                        },
+                    )
+                }
+                SettingsGroupCard {
+                    SettingsArrowRow(
+                        label = "Room ID",
+                        value = room?.roomId?.takeLast(6).orEmpty(),
+                        onClick = {},
+                        enabled = false,
+                    )
+                }
+                TextButton(onClick = { showRoomSettingsSheet = false }, modifier = Modifier.align(Alignment.End)) { Text("Close") }
+            }
+        }
+    }
+
+    if (showRoomLevelSheet) {
+        val totalSoul = room?.contributionTotalSoul.orEmpty().values.sum()
+        val currentLevel = roomLevelForSoul(totalSoul)
+        val currentLevelMinSoul = RoomLevelDefs.getOrNull(currentLevel - 1)?.requiredSoul ?: 0L
+        val nextLevelSoulRaw = RoomLevelDefs.getOrNull(currentLevel)?.requiredSoul ?: currentLevelMinSoul
+        val nextLevelSoulDisplay = if (currentLevel <= 1) nextLevelSoulRaw else nextLevelSoulRaw + 1_000L
+        val levelProgress = ((totalSoul - currentLevelMinSoul).toFloat() / (nextLevelSoulRaw - currentLevelMinSoul).coerceAtLeast(1L).toFloat()).coerceIn(0f, 1f)
+        ModalBottomSheet(onDismissRequest = { showRoomLevelSheet = false }) {
+            Column(
+                modifier = Modifier.fillMaxWidth().background(Color.White).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("Levels of Advanced Voice Room", color = Color(0xFF111827), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Image(
+                        painter = painterResource(id = roomLevelIconRes(currentLevel)),
+                        contentDescription = "Current level",
+                        modifier = Modifier.size(30.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Lv$currentLevel", color = Color(0xFF0F172A), fontWeight = FontWeight.SemiBold)
+                        LinearProgressIndicator(
+                            progress = { levelProgress },
+                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp)),
+                            color = Color(0xFF38BDF8),
+                            trackColor = Color(0xFFE2E8F0),
+                        )
+                        Text("$totalSoul / $nextLevelSoulDisplay souls", color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(RoomLevelDefs) { level ->
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Image(
+                                        painter = painterResource(id = level.iconRes),
+                                        contentDescription = "Level ${level.level}",
+                                        modifier = Modifier.size(26.dp),
+                                    )
+                                    Column {
+                                        Text("Level ${level.level}", color = Color(0xFF111827), fontWeight = FontWeight.SemiBold)
+                                        Text("${displayRankSoul(level)} souls needed", color = Color(0xFF64748B), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                                if (!level.backgroundName.isNullOrBlank()) {
+                                    TextButton(
+                                        onClick = {
+                                            roomBackgroundPreviewTarget = RoomBackgroundOptions
+                                                .lastOrNull { level.level >= it.unlockLevel }
+                                                ?.name
+                                                ?: "Free"
+                                            showRoomLevelSheet = false
+                                            showRoomBackgroundSheet = true
+                                        },
+                                    ) { Text("Preview") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showRoomBackgroundSheet) {
+        val totalSoul = room?.contributionTotalSoul.orEmpty().values.sum()
+        val roomLevel = roomLevelForSoul(totalSoul)
+        val backgroundOptions = RoomBackgroundOptions
+        var selectedBackground by remember(roomLevel, room?.roomBackgroundName, roomBackgroundPreviewTarget) {
+            mutableStateOf(
+                backgroundOptions.firstOrNull { it.name.equals(roomBackgroundPreviewTarget, ignoreCase = true) }
+                    ?: backgroundOptions.firstOrNull { it.name == room?.roomBackgroundName }
+                    ?: backgroundOptions.firstOrNull { it.name.equals("Free", ignoreCase = true) }
+                    ?: backgroundOptions.first(),
+            )
+        }
+        val canSaveSelected = isOwnRoom && roomLevel >= selectedBackground.unlockLevel
+        ModalBottomSheet(
+            onDismissRequest = {
+                roomBackgroundPreviewTarget = null
+                showRoomBackgroundSheet = false
+            },
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().background(Color(0xFFF3F4F6)).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Room Background", color = Color(0xFF111827), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (canSaveSelected) {
+                        TextButton(
+                            onClick = {
+                                viewModel.updateRoomBackgroundName(selectedBackground.name)
+                                roomBackgroundPreviewTarget = null
+                                showRoomBackgroundSheet = false
+                            },
+                        ) { Text("Save") }
+                    }
+                }
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .width(230.dp)
+                            .height(410.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Brush.verticalGradient(selectedBackground.colors))
+                            .border(1.dp, Color(0x22000000), RoundedCornerShape(18.dp)),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize().padding(12.dp),
+                            verticalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Welcome to SoulMast", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    repeat(4) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(34.dp)
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .background(Color.White.copy(alpha = 0.28f)),
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = "System: Welcome to SoulMast Voice Room.",
+                                color = Color.White.copy(alpha = 0.95f),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        PremiumBackgroundEffects(level = roomLevel, backgroundTier = selectedBackground.unlockLevel)
+                        if (roomLevel >= selectedBackground.unlockLevel) {
+                            Icon(
+                                imageVector = Icons.Filled.EmojiEvents,
+                                contentDescription = "Premium",
+                                tint = Color(0xFFFFD166),
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(10.dp)
+                                    .size(18.dp),
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    backgroundOptions.forEach { option ->
+                        val unlocked = roomLevel >= option.unlockLevel
+                        val selected = selectedBackground.name == option.name
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier
+                                .width(76.dp)
+                                .clickable {
+                                    selectedBackground = option
+                                },
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 76.dp, height = 56.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Brush.verticalGradient(option.colors))
+                                    .border(
+                                        width = if (selected) 2.dp else 1.dp,
+                                        color = if (selected) Color(0xFF38BDF8) else Color(0x33000000),
+                                        shape = RoundedCornerShape(10.dp),
+                                    ),
+                            ) {
+                                if (unlocked) {
+                                    Icon(
+                                        imageVector = Icons.Filled.EmojiEvents,
+                                        contentDescription = "Unlocked premium",
+                                        tint = Color(0xFFFFD166),
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(12.dp),
+                                    )
+                                }
+                            }
+                            Text(
+                                text = option.name,
+                                color = if (unlocked) Color(0xFF374151) else Color(0xFF9CA3AF),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            if (!unlocked) {
+                                Text("Lv${option.unlockLevel}", color = Color(0xFF9CA3AF), style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = "Background unlocks: Free, Lv3 Brief, Lv5 Music, Lv7 Mountains, Lv9 Nature, Lv10 Mahel",
+                    color = Color(0xFF94A3B8),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
     }
 
     if (showContributorsDialog) {
@@ -1018,16 +1506,531 @@ fun SocialVoiceRoomScreen(
 
 }
 
-private sealed interface ChatFeedItem {
-    val timestamp: Long
+@Composable
+private fun SettingsGroupCard(
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White)
+            .padding(horizontal = 14.dp, vertical = 2.dp),
+        content = content,
+    )
+}
 
-    data class TextMessage(val message: com.souljoy.soulmasti.domain.model.SocialVoiceChatMessage) : ChatFeedItem {
-        override val timestamp: Long = message.createdAt ?: 0L
+@Composable
+private fun SettingsArrowRow(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    trailingIcon: ImageVector? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = Color(0xFF111827), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (value.isNotBlank()) {
+                Text(value, color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodyMedium)
+            }
+            if (trailingIcon != null) {
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = null,
+                    tint = Color(0xFF9CA3AF),
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color(0xFFB4BAC5),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = Color(0xFF111827), style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingsCoverRow(
+    coverUrl: String?,
+    fallbackPhoto: String?,
+    fallbackInitial: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text("Cover", color = Color(0xFF111827), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(Color(0xFFE5E7EB)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (!coverUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = coverUrl,
+                        contentDescription = "Cover",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else if (!fallbackPhoto.isNullOrBlank()) {
+                    AsyncImage(
+                        model = fallbackPhoto,
+                        contentDescription = "Cover",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Text(fallbackInitial, color = Color(0xFF475569))
+                }
+            }
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Color(0xFFB4BAC5),
+            )
+        }
+    }
+}
+
+private data class RoomLevelDef(
+    val level: Int,
+    val requiredSoul: Long,
+    val iconRes: Int,
+    val backgroundName: String? = null,
+)
+
+private data class RoomBackgroundOption(
+    val name: String,
+    val unlockLevel: Int,
+    val colors: List<Color>,
+)
+
+private val RoomBackgroundOptions = listOf(
+    RoomBackgroundOption("Free", 1, listOf(Color(0xFF581C87), Color(0xFF7C3AED))),
+    RoomBackgroundOption("Brief", 3, listOf(Color(0xFF111827), Color(0xFF1F2937))),
+    RoomBackgroundOption("Music", 5, listOf(Color(0xFF080B2D), Color(0xFF090D3B), Color(0xFF101943))),
+    RoomBackgroundOption("Mountains", 7, listOf(Color(0xFF374151), Color(0xFF0EA5E9))),
+    RoomBackgroundOption("Nature", 9, listOf(Color(0xFF14532D), Color(0xFF22C55E))),
+    RoomBackgroundOption("Mahel", 10, listOf(Color(0xFF7C2D12), Color(0xFFF59E0B))),
+)
+
+private val RoomLevelDefs = listOf(
+    RoomLevelDef(1, 0L, R.drawable.rank_bronze_1),
+    RoomLevelDef(2, 8_000L, R.drawable.rank_bronze_2),
+    RoomLevelDef(3, 30_000L, R.drawable.rank_silver_1, "Club"),
+    RoomLevelDef(4, 100_000L, R.drawable.rank_silver_2),
+    RoomLevelDef(5, 300_000L, R.drawable.rank_platinum_1, "Diamonden Party"),
+    RoomLevelDef(6, 800_000L, R.drawable.rank_platinum_2),
+    RoomLevelDef(7, 2_000_000L, R.drawable.rank_gold_1, "Stars of a different world"),
+    RoomLevelDef(8, 4_800_000L, R.drawable.rank_gold_2),
+    RoomLevelDef(9, 11_000_000L, R.drawable.rank_ace_1, "Future City"),
+    RoomLevelDef(10, 24_000_000L, R.drawable.rank_ace_2, "Custom background"),
+)
+
+private fun roomLevelForSoul(totalSoul: Long): Int {
+    val matched = RoomLevelDefs.lastOrNull { totalSoul >= it.requiredSoul }
+    return matched?.level ?: 1
+}
+
+private fun roomLevelIconRes(level: Int): Int {
+    return RoomLevelDefs.firstOrNull { it.level == level }?.iconRes ?: R.drawable.rank_bronze_1
+}
+
+private fun roomLevelLabel(level: Int): String {
+    return when {
+        level >= 10 -> "Royal Conqueror"
+        level >= 9 -> "Ace Sovereign"
+        level >= 7 -> "Golden Elite"
+        level >= 5 -> "Platinum Elite"
+        level >= 3 -> "Silver Elite"
+        level >= 2 -> "Bronze II"
+        else -> "Bronze I"
+    }
+}
+
+private fun displayRankSoul(level: RoomLevelDef): Long {
+    return if (level.level == 1) level.requiredSoul else level.requiredSoul + 1_000L
+}
+
+private fun roomBackgroundColorsForLevel(level: Int): List<Color> {
+    return when {
+        level >= 10 -> listOf(Color(0xFF2A0A00), Color(0xFF7C2D12), Color(0xFFFFB347)) // Mahel (royal amber)
+        level >= 9 -> listOf(Color(0xFF052E16), Color(0xFF14532D), Color(0xFF4ADE80)) // Nature (emerald premium)
+        level >= 7 -> listOf(Color(0xFF111827), Color(0xFF334155), Color(0xFF38BDF8)) // Mountains (steel cyan)
+        level >= 5 -> listOf(Color(0xFF2E1065), Color(0xFF581C87), Color(0xFFA78BFA)) // Music (royal purple)
+        level >= 3 -> listOf(Color(0xFF0F172A), Color(0xFF111827), Color(0xFF374151)) // Brief (deep graphite)
+        else -> SocialVoiceRoomGradientColors
+    }
+}
+
+private fun roomBackgroundColorsForName(name: String?): List<Color>? {
+    val safe = name?.takeIf { it.isNotBlank() } ?: return null
+    return RoomBackgroundOptions.firstOrNull { it.name.equals(safe, ignoreCase = true) }?.colors
+}
+
+private fun roomBackgroundOptionForName(name: String?): RoomBackgroundOption? {
+    val safe = name?.takeIf { it.isNotBlank() } ?: return null
+    return RoomBackgroundOptions.firstOrNull { it.name.equals(safe, ignoreCase = true) }
+}
+
+private fun roomBackgroundUnlockLevel(name: String?): Int? {
+    val safe = name?.takeIf { it.isNotBlank() } ?: return null
+    return RoomBackgroundOptions.firstOrNull { it.name.equals(safe, ignoreCase = true) }?.unlockLevel
+}
+
+@Composable
+private fun PremiumBackgroundEffects(level: Int, backgroundTier: Int) {
+    if (backgroundTier < 3) return
+
+    val transition = rememberInfiniteTransition(label = "premium-bg")
+    val pulseAlpha by transition.animateFloat(
+        initialValue = 0.24f,
+        targetValue = 0.68f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "pulse-alpha",
+    )
+    val floatY by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = -28f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "float-y",
+    )
+    val shimmerX by transition.animateFloat(
+        initialValue = -420f,
+        targetValue = 1400f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmer-x",
+    )
+    val shimmerX2 by transition.animateFloat(
+        initialValue = 1400f,
+        targetValue = -420f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 4200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "shimmer-x-2",
+    )
+
+    val accent = when {
+        level >= 10 -> Color(0xFFFFC857)
+        level >= 9 -> Color(0xFF4ADE80)
+        level >= 7 -> Color(0xFF38BDF8)
+        level >= 5 -> Color(0xFFA78BFA)
+        level >= 3 -> Color(0xFF94A3B8)
+        else -> Color.Transparent
+    }
+    val tierStrength = when {
+        backgroundTier >= 10 -> 1f
+        backgroundTier >= 9 -> 0.92f
+        backgroundTier >= 7 -> 0.82f
+        backgroundTier >= 5 -> 0.72f
+        else -> 0.55f
+    }
+    val baseIconSize = when {
+        backgroundTier >= 10 -> 26.dp
+        backgroundTier >= 9 -> 24.dp
+        backgroundTier >= 7 -> 22.dp
+        backgroundTier >= 5 -> 20.dp
+        else -> 16.dp // level 3
     }
 
-    data class GiftMessage(val event: GiftEvent) : ChatFeedItem {
-        override val timestamp: Long = event.createdAt ?: 0L
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer(alpha = pulseAlpha),
+    ) {
+        // Premium corner aura glow (stronger at higher levels).
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(220.dp)
+                .graphicsLayer { translationY = floatY * 0.5f }
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = 0.24f * tierStrength), Color.Transparent),
+                    ),
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .size(260.dp)
+                .graphicsLayer { translationY = -floatY * 0.35f }
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = 0.17f * tierStrength), Color.Transparent),
+                    ),
+                ),
+        )
+
+        // Shimmer starts from level 5 and increases by tiers.
+        if (backgroundTier >= 5) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(if (backgroundTier >= 9) 140.dp else 120.dp)
+                    .graphicsLayer {
+                        translationX = shimmerX
+                        rotationZ = 13f
+                    }
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                Color.White.copy(alpha = (if (backgroundTier >= 9) 0.16f else 0.11f) * tierStrength),
+                                Color.Transparent,
+                            ),
+                        ),
+                    ),
+            )
+        }
+        if (backgroundTier >= 7) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(if (backgroundTier >= 10) 120.dp else 96.dp)
+                    .graphicsLayer {
+                        translationX = shimmerX2
+                        rotationZ = -11f
+                    }
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                accent.copy(alpha = 0.15f * tierStrength),
+                                Color.Transparent,
+                            ),
+                        ),
+                    ),
+            )
+        }
+
+        // Royal icons - much larger and visible.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 66.dp, end = 8.dp)
+                .size(if (backgroundTier >= 9) 40.dp else 34.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(Color.White.copy(alpha = 0.14f * tierStrength)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = accent.copy(alpha = 0.98f),
+                modifier = Modifier
+                    .graphicsLayer { translationY = floatY }
+                    .size(baseIconSize),
+            )
+        }
+        Icon(
+            imageVector = Icons.Filled.EmojiEvents,
+            contentDescription = null,
+            tint = accent.copy(alpha = 0.96f),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 14.dp, top = 120.dp)
+                .graphicsLayer { translationY = -floatY * 0.6f }
+                .size((baseIconSize.value - 4).coerceAtLeast(14f).dp),
+        )
+        Icon(
+            imageVector = Icons.Filled.EmojiEvents,
+            contentDescription = null,
+            tint = accent.copy(alpha = 0.9f),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 20.dp, bottom = 128.dp)
+                .graphicsLayer { translationY = floatY * 0.4f }
+                .size((baseIconSize.value - 6).coerceAtLeast(13f).dp),
+        )
+        if (backgroundTier >= 7) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = accent.copy(alpha = 0.88f),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 30.dp, top = 86.dp)
+                    .graphicsLayer { translationY = -floatY * 0.45f }
+                    .size(17.dp),
+            )
+        }
+        if (backgroundTier >= 9) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = Color(0xFFFFF3B0).copy(alpha = 0.9f),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 88.dp)
+                    .graphicsLayer { translationY = floatY * 0.8f }
+                    .size(18.dp),
+            )
+        }
+        if (backgroundTier >= 10) {
+            Icon(
+                imageVector = Icons.Filled.EmojiEvents,
+                contentDescription = null,
+                tint = Color(0xFFFFE082),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .graphicsLayer { translationY = floatY * 0.35f }
+                    .size(13.dp),
+            )
+        }
     }
+}
+
+@Composable
+private fun InfoMetricCard(
+    label: String,
+    value: String,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.08f)),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(label, color = tint, style = MaterialTheme.typography.bodySmall)
+            Text(value, color = tint, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+private data class RoomMenuAction(
+    val label: String,
+    val icon: ImageVector,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun RoomFunctionMenuOverlay(
+    actions: List<RoomMenuAction>,
+    onDismiss: () -> Unit,
+    onAction: (RoomMenuAction) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x66000000))
+            .clickable(onClick = onDismiss),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .clip(RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.dp))
+                .background(Color(0xEE060A17))
+                .clickable(enabled = false, onClick = {})
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                modifier = Modifier.padding(0.dp,10.dp,0.dp , 0.dp),
+                text = "Room function",
+                color = Color.White.copy(alpha = 0.9f),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            FlowRow(
+                maxItemsInEachRow = 3,
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                actions.forEach { action ->
+                    Column(
+                        modifier = Modifier
+                            .width(74.dp)
+                            .clickable { onAction(action) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color.White.copy(alpha = 0.18f), RoundedCornerShape(999.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = action.icon,
+                                contentDescription = action.label,
+                                tint = Color.White,
+                            )
+                        }
+                        Text(
+                            text = action.label,
+                            color = Color.White.copy(alpha = 0.92f),
+                            style = MaterialTheme.typography.labelMedium,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private sealed class ChatFeedItem(open val timestamp: Long) {
+    data class TextMessage(
+        val message: com.souljoy.soulmasti.domain.model.SocialVoiceChatMessage,
+    ) : ChatFeedItem(message.createdAt ?: 0L)
+
+    data class GiftMessage(
+        val event: GiftEvent,
+    ) : ChatFeedItem(event.createdAt ?: 0L)
 }
 
 @Composable

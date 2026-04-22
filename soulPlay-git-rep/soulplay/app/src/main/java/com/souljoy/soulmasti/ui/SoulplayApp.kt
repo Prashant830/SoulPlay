@@ -12,14 +12,20 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,7 +71,11 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import com.souljoy.soulmasti.data.billing.CoinPurchaseCoordinator
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import com.souljoy.soulmasti.domain.repository.SocialRepository
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 private data class BottomTab(
     val route: String,
@@ -96,6 +106,10 @@ fun SoulplayApp(
         }
     }
     val socialRepository: SocialRepository = koinInject<SocialRepository>()
+    val firebaseAuth: FirebaseAuth = koinInject<FirebaseAuth>()
+    val firebaseDatabase: FirebaseDatabase = koinInject<FirebaseDatabase>()
+    val scope = rememberCoroutineScope()
+    var leagueRoomSwitchTarget by remember { mutableStateOf<String?>(null) }
     val incomingFriendRequests by socialRepository.incomingFriendRequests.collectAsStateWithLifecycle()
     val unreadByPeer by socialRepository.unreadMessageCounts.collectAsStateWithLifecycle()
     val friendRequestBadgeCount = incomingFriendRequests.size
@@ -291,7 +305,28 @@ fun SoulplayApp(
                     },
                     onOpenRoom = { roomId ->
                         if (roomId.isNotBlank()) {
-                            navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                            scope.launch {
+                                val uid = firebaseAuth.currentUser?.uid.orEmpty()
+                                if (uid.isBlank()) {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                                    return@launch
+                                }
+                                val currentRoomId = runCatching {
+                                    firebaseDatabase.reference
+                                        .child("users")
+                                        .child(uid)
+                                        .child("currentSocialRoomId")
+                                        .get()
+                                        .await()
+                                        .getValue(String::class.java)
+                                        .orEmpty()
+                                }.getOrDefault("")
+                                if (currentRoomId.isBlank() || currentRoomId == roomId) {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                                } else {
+                                    leagueRoomSwitchTarget = roomId
+                                }
+                            }
                         }
                     },
                     onOpenRewardInbox = {
@@ -479,5 +514,24 @@ fun SoulplayApp(
                 }
             }
         }
+    }
+
+    leagueRoomSwitchTarget?.let { targetRoomId ->
+        AlertDialog(
+            onDismissRequest = { leagueRoomSwitchTarget = null },
+            title = { Text("Switch room?") },
+            text = { Text("You are already in another voice room. Joining this one will leave your old room. Continue?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        leagueRoomSwitchTarget = null
+                        navController.navigate(SoulplayDestinations.socialVoiceRoom(targetRoomId)) { launchSingleTop = true }
+                    },
+                ) { Text("Yes") }
+            },
+            dismissButton = {
+                TextButton(onClick = { leagueRoomSwitchTarget = null }) { Text("No") }
+            },
+        )
     }
 }
