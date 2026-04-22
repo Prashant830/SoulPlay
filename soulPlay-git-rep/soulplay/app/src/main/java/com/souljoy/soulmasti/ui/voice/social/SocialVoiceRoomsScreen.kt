@@ -102,7 +102,9 @@ fun SocialVoiceRoomsScreen(
                             )
                             Button(
                                 onClick = {
-                                    if (entitlement.hasPermanentRoom) onOpenRoom(myRoom?.roomId ?: return@Button)
+                                    if (entitlement.hasPermanentRoom) {
+                                        viewModel.openMyRoom { roomId -> onOpenRoom(roomId) }
+                                    }
                                     else showRoomPurchaseConfirm = true
                                 },
                             ) {

@@ -101,12 +101,33 @@ class SocialVoiceRoomsViewModel(
                 _joinConfirm.value = JoinRoomConfirmUi(
                     targetRoomId = friendUid,
                     oldRoomId = currentRoomId,
+                    enterTargetViaRepository = true,
                 )
                 return@launch
             }
             val result = socialVoiceRoomRepository.enterFriendRoom(friendUid)
             result.onFailure { _error.value = it.message ?: "Could not enter friend room" }
             result.onSuccess { onSuccess() }
+        }
+    }
+
+    fun openMyRoom(onSuccess: (String) -> Unit) {
+        viewModelScope.launch {
+            val uid = requireUid()
+            val targetRoomId = myRoom.value?.roomId?.takeIf { it.isNotBlank() } ?: uid
+            val currentRoomId = runCatching {
+                database.reference.child("users").child(uid).child("currentSocialRoomId").get().await()
+                    .getValue(String::class.java).orEmpty()
+            }.getOrDefault("")
+            if (currentRoomId.isNotBlank() && currentRoomId != targetRoomId) {
+                _joinConfirm.value = JoinRoomConfirmUi(
+                    targetRoomId = targetRoomId,
+                    oldRoomId = currentRoomId,
+                    enterTargetViaRepository = false,
+                )
+                return@launch
+            }
+            onSuccess(targetRoomId)
         }
     }
 
@@ -121,15 +142,20 @@ class SocialVoiceRoomsViewModel(
             if (prompt.oldRoomId.isNotBlank() && prompt.oldRoomId != prompt.targetRoomId) {
                 runCatching { socialVoiceRoomRepository.setRoomPresence(prompt.oldRoomId, false) }
             }
-            val result = socialVoiceRoomRepository.enterFriendRoom(prompt.targetRoomId)
-            result.onFailure { _error.value = it.message ?: "Could not switch room" }
-            result.onSuccess {
+            if (prompt.enterTargetViaRepository) {
+                val result = socialVoiceRoomRepository.enterFriendRoom(prompt.targetRoomId)
+                result.onFailure { _error.value = it.message ?: "Could not switch room" }
+                result.onSuccess {
+                    _joinConfirm.value = null
+                    onSuccess(prompt.targetRoomId)
+                    runCatching {
+                        database.reference.child("users").child(uid).child("currentSocialRoomId")
+                            .setValue(prompt.targetRoomId).await()
+                    }
+                }
+            } else {
                 _joinConfirm.value = null
                 onSuccess(prompt.targetRoomId)
-                runCatching {
-                    database.reference.child("users").child(uid).child("currentSocialRoomId")
-                        .setValue(prompt.targetRoomId).await()
-                }
             }
         }
     }
@@ -228,5 +254,6 @@ data class FriendRoomCardUi(
 data class JoinRoomConfirmUi(
     val targetRoomId: String,
     val oldRoomId: String,
+    val enterTargetViaRepository: Boolean = true,
 )
 
