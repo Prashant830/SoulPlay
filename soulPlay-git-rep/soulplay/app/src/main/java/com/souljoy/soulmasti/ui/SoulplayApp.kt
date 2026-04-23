@@ -57,6 +57,7 @@ import com.souljoy.soulmasti.ui.auth.AuthGateScreen
 import com.souljoy.soulmasti.ui.auth.CreateProfileScreen
 import com.souljoy.soulmasti.ui.auth.LoginScreen
 import com.souljoy.soulmasti.ui.navigation.SoulplayDestinations
+import com.souljoy.soulmasti.ui.rewards.DailyRewardsScreen
 import com.souljoy.soulmasti.ui.settings.SettingsScreen
 import com.souljoy.soulmasti.ui.settings.UserProfileScreen
 import com.souljoy.soulmasti.ui.shop.GoldShopScreen
@@ -126,7 +127,8 @@ fun SoulplayApp(
             route.contains("auth_gate") ||
             route.contains("user_profile") ||
             route.contains(SoulplayDestinations.League) ||
-            route.contains(SoulplayDestinations.GoldShop)
+            route.contains(SoulplayDestinations.GoldShop) ||
+            route.contains(SoulplayDestinations.DailyRewards)
     val showBottomBar = !hideBottomBar
 
     Scaffold(
@@ -286,6 +288,9 @@ fun SoulplayApp(
                     onOpenGoldShop = {
                         navController.navigate(SoulplayDestinations.GoldShop)
                     },
+                    onOpenDailyRewards = {
+                        navController.navigate(SoulplayDestinations.DailyRewards) { launchSingleTop = true }
+                    },
                     onDismissError = { homeVm.dismissError() }
                 )
             }
@@ -293,6 +298,9 @@ fun SoulplayApp(
                 GoldShopScreen(
                     onBack = { navController.popBackStack() },
                 )
+            }
+            composable(SoulplayDestinations.DailyRewards) {
+                DailyRewardsScreen(onBack = { navController.popBackStack() })
             }
             composable(SoulplayDestinations.League) {
                 val leagueVm: LeagueViewModel = koinViewModel()

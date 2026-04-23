@@ -12,6 +12,9 @@ val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 val agoraAppId: String = localProperties.getProperty("AGORA_APP_ID", "")
+val admobAppId: String = localProperties.getProperty("ADMOB_APP_ID", "")
+val admobRewardedUnitId: String = localProperties.getProperty("ADMOB_REWARDED_UNIT_ID", "")
+val admobTestDeviceIds: String = localProperties.getProperty("ADMOB_TEST_DEVICE_IDS", "")
 
 val keystorePropertiesFile = rootProject.file("keystore.properties")
 val keystoreProperties = Properties().apply {
@@ -34,6 +37,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "AGORA_APP_ID", "\"$agoraAppId\"")
+        buildConfigField("String", "ADMOB_REWARDED_AD_UNIT_ID", "\"$admobRewardedUnitId\"")
+        buildConfigField("String", "ADMOB_TEST_DEVICE_IDS", "\"$admobTestDeviceIds\"")
+        manifestPlaceholders["admobAppId"] = admobAppId
     }
 
     signingConfigs {
@@ -168,6 +174,8 @@ dependencies {
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation(libs.kotlinx.coroutines.play.services)
     implementation("com.google.android.gms:play-services-auth:20.7.0")
+    implementation("com.google.android.gms:play-services-ads:23.3.0")
+    implementation("com.google.android.gms:play-services-ads:23.3.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.agora.rtc:voice-rtc-basic:4.6.3")
     implementation("com.android.billingclient:billing:7.0.0")

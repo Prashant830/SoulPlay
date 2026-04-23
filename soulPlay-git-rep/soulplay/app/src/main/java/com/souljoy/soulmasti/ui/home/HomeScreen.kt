@@ -50,9 +50,15 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.souljoy.soulmasti.R
@@ -68,6 +74,7 @@ fun HomeScreen(
     onOpenVoiceTab: () -> Unit,
     onOpenNotifications: () -> Unit = {},
     onOpenGoldShop: () -> Unit = {},
+    onOpenDailyRewards: () -> Unit = {},
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -117,28 +124,27 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(onClick = onOpenNotifications) {
-                        if (notificationCount > 0) {
-                            BadgedBox(
-                                badge = {
-                                    Badge {
-                                        Text(notificationCount.coerceAtMost(99).toString())
-                                    }
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Filled.Notifications,
-                                    contentDescription = "Notifications",
-                                    tint = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                        } else {
-                            Icon(
-                                Icons.Filled.Notifications,
-                                contentDescription = "Notifications",
-                                tint = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                    val pulse = rememberInfiniteTransition(label = "rewardsPulse")
+                    val pulseScale by pulse.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.08f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 850),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                        label = "rewardsPulseScale",
+                    )
+                    IconButton(
+                        onClick = onOpenDailyRewards,
+                        modifier = Modifier
+                            .scale(pulseScale)
+                            .clip(RoundedCornerShape(12.dp)),
+                    ) {
+                        Text(
+                            text = "🎁",
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                        )
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

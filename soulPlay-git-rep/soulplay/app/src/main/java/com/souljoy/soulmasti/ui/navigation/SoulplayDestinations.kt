@@ -16,6 +16,7 @@ object SoulplayDestinations {
     fun socialVoiceRoom(roomId: String) = "social_voice_room/$roomId"
 
     const val Settings = "settings"
+    const val DailyRewards = "daily_rewards"
     const val League = "league"
     const val RewardInbox = "reward_inbox"
     const val UserProfile = "user_profile/{uid}"

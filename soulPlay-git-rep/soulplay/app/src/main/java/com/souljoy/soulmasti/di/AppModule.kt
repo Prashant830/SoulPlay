@@ -24,6 +24,7 @@ import com.souljoy.soulmasti.ui.chat.ChatThreadViewModel
 import com.souljoy.soulmasti.ui.chat.ChatViewModel
 import com.souljoy.soulmasti.ui.league.LeagueViewModel
 import com.souljoy.soulmasti.ui.league.RewardInboxViewModel
+import com.souljoy.soulmasti.ui.rewards.DailyRewardsViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
 import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
@@ -47,6 +48,7 @@ val appModule = module {
     single<SocialVoiceRoomRepository> { FirebaseSocialVoiceRoomRepository(get(), get()) }
     single<VoiceRoomRepository> { AgoraVoiceRoomRepository(androidContext()) }
     viewModel { HomeViewModel(androidApplication(), get()) }
+    viewModel { DailyRewardsViewModel(androidApplication(), get(), get()) }
     viewModel { GoldShopViewModel(get(), get(), get()) }
     viewModel { AuthGateViewModel(get(), get()) }
     viewModel { LoginViewModel(get()) }

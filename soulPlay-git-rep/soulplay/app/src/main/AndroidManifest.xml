@@ -26,6 +26,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Soulplay"
         tools:replace="android:allowBackup,android:label,android:icon,android:roundIcon,android:theme,android:dataExtractionRules,android:fullBackupContent">
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="${admobAppId}" />
 
         <activity
             android:name="com.souljoy.soulmasti.MainActivity"
