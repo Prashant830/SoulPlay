@@ -97,6 +97,11 @@ class SocialVoiceRoomsViewModel(
                 database.reference.child("users").child(uid).child("currentSocialRoomId").get().await()
                     .getValue(String::class.java).orEmpty()
             }.getOrDefault("")
+            // Already in same room: don't call paid/join flow again.
+            if (currentRoomId == friendUid) {
+                onSuccess()
+                return@launch
+            }
             if (currentRoomId.isNotBlank() && currentRoomId != friendUid) {
                 _joinConfirm.value = JoinRoomConfirmUi(
                     targetRoomId = friendUid,
@@ -108,6 +113,25 @@ class SocialVoiceRoomsViewModel(
             val result = socialVoiceRoomRepository.enterFriendRoom(friendUid)
             result.onFailure { _error.value = it.message ?: "Could not enter friend room" }
             result.onSuccess { onSuccess() }
+        }
+    }
+
+    fun checkFriendRoomJoinRequirement(
+        friendUid: String,
+        onAlreadyInRoom: () -> Unit,
+        onNeedsJoinFeeConfirm: () -> Unit,
+    ) {
+        viewModelScope.launch {
+            val uid = requireUid()
+            val currentRoomId = runCatching {
+                database.reference.child("users").child(uid).child("currentSocialRoomId").get().await()
+                    .getValue(String::class.java).orEmpty()
+            }.getOrDefault("")
+            if (currentRoomId == friendUid) {
+                onAlreadyInRoom()
+            } else {
+                onNeedsJoinFeeConfirm()
+            }
         }
     }
 
@@ -232,11 +256,29 @@ class SocialVoiceRoomsViewModel(
                 ownerName = userSnap?.child("username")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
                     ?: FirebaseUidMapping.shortLabel(uid),
                 ownerPhoto = userSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.takeIf { it.isNotBlank() },
+                roomName = roomSnap?.child("roomName")?.getValue(String::class.java)?.trim().orEmpty().ifBlank {
+                    "${userSnap?.child("username")?.getValue(String::class.java)?.takeIf { it.isNotBlank() } ?: FirebaseUidMapping.shortLabel(uid)}'s Room"
+                },
+                roomPhoto = roomSnap?.child("roomCoverUrl")?.getValue(String::class.java)?.takeIf { it.isNotBlank() },
                 onlineCount = roomSnap?.child("presence")?.childrenCount?.toInt() ?: 0,
+                totalSoul = roomSnap
+                    ?.child("contribution")
+                    ?.child("totalSoul")
+                    ?.children
+                    ?.sumOf { parseLong(it.value) ?: 0L }
+                    ?: 0L,
                 exists = hasRoomEntitlement && roomSnap?.exists() == true,
             )
         }.sortedBy { it.ownerName.lowercase() }
         _friendRooms.value = cards
+    }
+
+    private fun parseLong(value: Any?): Long? = when (value) {
+        is Long -> value
+        is Int -> value.toLong()
+        is Double -> value.toLong()
+        is String -> value.toLongOrNull()
+        else -> null
     }
 
     override fun onCleared() {
@@ -263,7 +305,10 @@ data class FriendRoomCardUi(
     val ownerUid: String,
     val ownerName: String,
     val ownerPhoto: String?,
+    val roomName: String,
+    val roomPhoto: String?,
     val onlineCount: Int,
+    val totalSoul: Long,
     val exists: Boolean,
 )
 

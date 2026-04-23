@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,11 +52,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.souljoy.soulmasti.R
 import com.souljoy.soulmasti.ui.rewards.AdMobRewardedAds
 import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
@@ -346,7 +350,18 @@ private fun BalanceHeader(coins: Long, soul: Long) {
         Text("Balance", fontWeight = FontWeight.SemiBold)
         Column(horizontalAlignment = Alignment.End) {
             Text("🪙 $coins", fontWeight = FontWeight.Bold, color = Color(0xFFE0A800))
-            Text("👻 $soul", style = MaterialTheme.typography.labelMedium, color = Color(0xFF7C3AED))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_soul_cute_ghost),
+                    contentDescription = "Soul",
+                    modifier = Modifier.size(14.dp),
+                    contentScale = ContentScale.Fit,
+                )
+                Text("$soul", style = MaterialTheme.typography.labelMedium, color = Color(0xFF7C3AED))
+            }
         }
     }
 }

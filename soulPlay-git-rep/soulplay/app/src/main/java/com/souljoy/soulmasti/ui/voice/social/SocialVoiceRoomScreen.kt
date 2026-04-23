@@ -1760,16 +1760,16 @@ private val RoomBackgroundOptions = listOf(
 )
 
 private val RoomLevelDefs = listOf(
-    RoomLevelDef(1, 0L, R.drawable.rank_bronze_1),
-    RoomLevelDef(2, 8_000L, R.drawable.rank_bronze_2),
-    RoomLevelDef(3, 30_000L, R.drawable.rank_silver_1, "Club"),
-    RoomLevelDef(4, 100_000L, R.drawable.rank_silver_2),
-    RoomLevelDef(5, 300_000L, R.drawable.rank_platinum_1, "Diamonden Party"),
-    RoomLevelDef(6, 800_000L, R.drawable.rank_platinum_2),
-    RoomLevelDef(7, 2_000_000L, R.drawable.rank_gold_1, "Stars of a different world"),
-    RoomLevelDef(8, 4_800_000L, R.drawable.rank_gold_2),
-    RoomLevelDef(9, 11_000_000L, R.drawable.rank_ace_1, "Future City"),
-    RoomLevelDef(10, 24_000_000L, R.drawable.rank_ace_2, "Custom background"),
+    RoomLevelDef(1, 0L, R.drawable.voice_room_level_1),
+    RoomLevelDef(2, 8_000L, R.drawable.voice_room_level_2),
+    RoomLevelDef(3, 30_000L, R.drawable.voice_room_level_3, "Club"),
+    RoomLevelDef(4, 100_000L, R.drawable.voice_room_level_4),
+    RoomLevelDef(5, 300_000L, R.drawable.voice_room_level_5, "Diamonden Party"),
+    RoomLevelDef(6, 800_000L, R.drawable.voice_room_level_6),
+    RoomLevelDef(7, 2_000_000L, R.drawable.voice_room_level_7, "Stars of a different world"),
+    RoomLevelDef(8, 4_800_000L, R.drawable.voice_room_level_8),
+    RoomLevelDef(9, 11_000_000L, R.drawable.voice_room_level_9, "Future City"),
+    RoomLevelDef(10, 24_000_000L, R.drawable.voice_room_level_10, "Custom background"),
 )
 
 private fun roomLevelForSoul(totalSoul: Long): Int {
@@ -1778,19 +1778,11 @@ private fun roomLevelForSoul(totalSoul: Long): Int {
 }
 
 private fun roomLevelIconRes(level: Int): Int {
-    return RoomLevelDefs.firstOrNull { it.level == level }?.iconRes ?: R.drawable.rank_bronze_1
+    return RoomLevelDefs.firstOrNull { it.level == level }?.iconRes ?: R.drawable.voice_room_level_1
 }
 
 private fun roomLevelLabel(level: Int): String {
-    return when {
-        level >= 10 -> "Royal Conqueror"
-        level >= 9 -> "Ace Sovereign"
-        level >= 7 -> "Golden Elite"
-        level >= 5 -> "Platinum Elite"
-        level >= 3 -> "Silver Elite"
-        level >= 2 -> "Bronze II"
-        else -> "Bronze I"
-    }
+    return "Level $level"
 }
 
 private fun displayRankSoul(level: RoomLevelDef): Long {

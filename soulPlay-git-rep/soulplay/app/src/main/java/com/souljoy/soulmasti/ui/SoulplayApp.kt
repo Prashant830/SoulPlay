@@ -1,5 +1,6 @@
 package com.souljoy.soulmasti.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
@@ -32,6 +33,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -99,6 +101,12 @@ private data class LeaveRoomRequest(
     val currentRoomId: String,
     val targetRoomId: String? = null,
     val exitCurrentScreen: Boolean = false,
+    val applyJoinFee: Boolean = false,
+)
+
+private data class JoinFeeRequest(
+    val targetRoomId: String,
+    val currentRoomId: String,
 )
 
 @Composable
@@ -107,6 +115,7 @@ fun SoulplayApp(
     requestVoicePermission: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val coinPurchaseSync: CoinPurchaseCoordinator = koinInject()
@@ -121,6 +130,7 @@ fun SoulplayApp(
     val firebaseDatabase: FirebaseDatabase = koinInject<FirebaseDatabase>()
     val scope = rememberCoroutineScope()
     var leaveRoomRequest by remember { mutableStateOf<LeaveRoomRequest?>(null) }
+    var joinFeeRequest by remember { mutableStateOf<JoinFeeRequest?>(null) }
     var pendingRoomInviteForChat by remember { mutableStateOf<PendingRoomInvite?>(null) }
     val incomingFriendRequests by socialRepository.incomingFriendRequests.collectAsStateWithLifecycle()
     val unreadByPeer by socialRepository.unreadMessageCounts.collectAsStateWithLifecycle()
@@ -349,12 +359,13 @@ fun SoulplayApp(
                                         .getValue(String::class.java)
                                         .orEmpty()
                                 }.getOrDefault("")
-                                if (currentRoomId.isBlank() || currentRoomId == roomId) {
+                                val isOwnRoom = roomId == uid
+                                if (isOwnRoom || currentRoomId == roomId) {
                                     navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
                                 } else {
-                                    leaveRoomRequest = LeaveRoomRequest(
-                                        currentRoomId = currentRoomId,
+                                    joinFeeRequest = JoinFeeRequest(
                                         targetRoomId = roomId,
+                                        currentRoomId = currentRoomId,
                                     )
                                 }
                             }
@@ -536,12 +547,13 @@ fun SoulplayApp(
                                         .getValue(String::class.java)
                                         .orEmpty()
                                 }.getOrDefault("")
-                                if (currentRoomId.isBlank() || currentRoomId == roomId) {
+                                val isOwnRoom = roomId == uid
+                                if (isOwnRoom || currentRoomId == roomId) {
                                     navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
                                 } else {
-                                    leaveRoomRequest = LeaveRoomRequest(
-                                        currentRoomId = currentRoomId,
+                                    joinFeeRequest = JoinFeeRequest(
                                         targetRoomId = roomId,
+                                        currentRoomId = currentRoomId,
                                     )
                                 }
                             }
@@ -596,6 +608,46 @@ fun SoulplayApp(
         }
     }
 
+    joinFeeRequest?.let { request ->
+        AlertDialog(
+            onDismissRequest = { joinFeeRequest = null },
+            title = { Text("Join room?") },
+            text = { Text("Joining fee: 50 coins. Continue?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        joinFeeRequest = null
+                        if (request.currentRoomId.isNotBlank()) {
+                            leaveRoomRequest = LeaveRoomRequest(
+                                currentRoomId = request.currentRoomId,
+                                targetRoomId = request.targetRoomId,
+                                applyJoinFee = true,
+                            )
+                        } else {
+                            scope.launch {
+                                val result = socialVoiceRoomRepository.enterFriendRoom(
+                                    roomId = request.targetRoomId,
+                                    friendEntryCostCoins = 50L,
+                                )
+                                result.onSuccess {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(request.targetRoomId)) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                                result.onFailure {
+                                    Toast.makeText(context, it.message ?: "Could not enter room", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    },
+                ) { Text("Join") }
+            },
+            dismissButton = {
+                TextButton(onClick = { joinFeeRequest = null }) { Text("Cancel") }
+            },
+        )
+    }
+
     leaveRoomRequest?.let { request ->
         AlertDialog(
             onDismissRequest = { leaveRoomRequest = null },
@@ -607,6 +659,7 @@ fun SoulplayApp(
                         val currentRoomId = request.currentRoomId
                         val targetRoomId = request.targetRoomId
                         val exitCurrentScreen = request.exitCurrentScreen
+                        val applyJoinFee = request.applyJoinFee
                         leaveRoomRequest = null
                         scope.launch {
                             val uid = firebaseAuth.currentUser?.uid.orEmpty()
@@ -649,8 +702,19 @@ fun SoulplayApp(
                             }
                             when {
                                 !targetRoomId.isNullOrBlank() -> {
-                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(targetRoomId)) {
-                                        launchSingleTop = true
+                                    val enterResult = if (applyJoinFee) {
+                                        socialVoiceRoomRepository.enterFriendRoom(
+                                            roomId = targetRoomId,
+                                            friendEntryCostCoins = 50L,
+                                        )
+                                    } else Result.success(Unit)
+                                    enterResult.onSuccess {
+                                        navController.navigate(SoulplayDestinations.socialVoiceRoom(targetRoomId)) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+                                    enterResult.onFailure {
+                                        Toast.makeText(context, it.message ?: "Could not enter room", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                                 exitCurrentScreen -> {
