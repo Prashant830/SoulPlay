@@ -142,22 +142,6 @@ fun GiftWallDialog(
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                 )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.Start,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    availableCoins?.let { coins ->
-                                        Text(
-                                            text = "You have: $coins coins",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF0F766E),
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                    }
-                                }
                                 Text(
                                     text = if (selectedGift == null) "Total: 0 coins" else "Total: $totalCoins coins",
                                     style = MaterialTheme.typography.bodySmall,

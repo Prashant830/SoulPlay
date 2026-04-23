@@ -16,6 +16,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
@@ -98,8 +99,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -143,6 +146,7 @@ fun SocialVoiceRoomScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val pickRoomCoverPhoto = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
@@ -294,7 +298,10 @@ fun SocialVoiceRoomScreen(
                 brush = Brush.verticalGradient(
                     colors = liveRoomBackgroundColors,
                 ),
-            ),
+            )
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { focusManager.clearFocus(force = true) })
+            },
     ) {
         PremiumBackgroundEffects(level = liveRoomLevel, backgroundTier = activeBackgroundOption.unlockLevel)
 
@@ -512,9 +519,7 @@ fun SocialVoiceRoomScreen(
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                modifier = Modifier
-                    .weight(1f)
-                    .imePadding(),
+                modifier = Modifier.weight(1f),
             ) {
                 Box(
                     modifier = Modifier
@@ -562,56 +567,67 @@ fun SocialVoiceRoomScreen(
                                 }
                             }
                         }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 2.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            OutlinedTextField(
-                                value = draft,
-                                onValueChange = { draft = it },
-                                modifier = Modifier.weight(1f),
-                                placeholder = { Text("Type...", color = Color(0xFF94A3B8)) },
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedBorderColor = Color(0xFF60A5FA),
-                                    unfocusedBorderColor = Color(0xFF334155),
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    cursorColor = Color.White,
-                                ),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                keyboardActions = KeyboardActions(
-                                    onSend = {
-                                        val t = draft.trim()
-                                        if (t.isNotBlank()) {
-                                            viewModel.sendMessage(t)
-                                            draft = ""
-                                        }
-                                    },
-                                ),
-                                singleLine = true,
-                            )
-                            Button(
-                                onClick = {
-                                    val t = draft.trim()
-                                    if (t.isNotBlank()) {
-                                        viewModel.sendMessage(t)
-                                        draft = ""
-                                    }
-                                },
-                                shape = RoundedCornerShape(999.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
-                            ) {
-                                Text("Send", color = Color.White)
-                            }
-                        }
                     }
                 }
             }
-
+        }
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = Color(0x661E293B),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .imePadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Type...", color = Color(0xFF94A3B8)) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF60A5FA),
+                        unfocusedBorderColor = Color(0xFF334155),
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        cursorColor = Color.White,
+                    ),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            val t = draft.trim()
+                            if (t.isNotBlank()) {
+                                viewModel.sendMessage(t)
+                                draft = ""
+                            }
+                        },
+                    ),
+                    singleLine = true,
+                )
+                Button(
+                    onClick = {
+                        val t = draft.trim()
+                        if (t.isNotBlank()) {
+                            viewModel.sendMessage(t)
+                            draft = ""
+                        }
+                    },
+                    shape = RoundedCornerShape(999.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                ) {
+                    Text("Send", color = Color.White)
+                }
+            }
         }
     }
 
@@ -1408,7 +1424,7 @@ fun SocialVoiceRoomScreen(
                                 }
                             }
                             Text(
-                                text = "System: Welcome to SoulMast Voice Room.",
+                                text = "System: Welcome to SoulMasti Voice Room.",
                                 color = Color.White.copy(alpha = 0.95f),
                                 style = MaterialTheme.typography.bodySmall,
                             )
