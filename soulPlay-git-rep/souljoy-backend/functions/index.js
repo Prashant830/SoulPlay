@@ -372,33 +372,52 @@ exports.aggregateGiftLeaderboards = functions.database.onValueCreated(
 exports.distributeDailyTop3Rewards = functions.scheduler.onSchedule("10 0 * * *", async () => {
     const now = Date.now();
     const targetDayKey = utcDayKey(now - 86400000); // yesterday
-    const rewardId = `daily-${targetDayKey}`;
-    await distributeProfileRewards({
+    await distributeProfileandVoiceroomRewards({
         leaderboardPath: `leaderboardsV1/profile/daily/${targetDayKey}`,
         topN: 3,
-        rewardId,
+        rewardId: `daily-${targetDayKey}-profile`,
+        rewardTarget: "profile",
+    });
+    await distributeProfileandVoiceroomRewards({
+        leaderboardPath: `leaderboardsV1/room/daily/${targetDayKey}`,
+        topN: 3,
+        rewardId: `daily-${targetDayKey}-voice_room`,
+        rewardTarget: "voice_room",
     });
 });
 
 exports.distributeWeeklyTop5Rewards = functions.scheduler.onSchedule("15 0 * * 1", async () => {
     const now = Date.now();
     const targetWeekKey = utcWeekKey(now - 7 * 86400000); // previous week
-    const rewardId = `weekly-${targetWeekKey}`;
-    await distributeProfileRewards({
+    await distributeProfileandVoiceroomRewards({
         leaderboardPath: `leaderboardsV1/profile/weekly/${targetWeekKey}`,
         topN: 5,
-        rewardId,
+        rewardId: `weekly-${targetWeekKey}-profile`,
+        rewardTarget: "profile",
+    });
+    await distributeProfileandVoiceroomRewards({
+        leaderboardPath: `leaderboardsV1/room/weekly/${targetWeekKey}`,
+        topN: 5,
+        rewardId: `weekly-${targetWeekKey}-voice_room`,
+        rewardTarget: "voice_room",
     });
 });
 
 exports.distributeMonthlyTop10Rewards = functions.scheduler.onSchedule("20 0 1 * *", async () => {
     const now = new Date();
     const prevMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
-    const rewardId = `monthly-total-${prevMonth.getUTCFullYear()}-${String(prevMonth.getUTCMonth() + 1).padStart(2, "0")}`;
-    await distributeProfileRewards({
+    const monthKey = `${prevMonth.getUTCFullYear()}-${String(prevMonth.getUTCMonth() + 1).padStart(2, "0")}`;
+    await distributeProfileandVoiceroomRewards({
         leaderboardPath: "leaderboardsV1/profile/total",
         topN: 10,
-        rewardId,
+        rewardId: `monthly-total-${monthKey}-profile`,
+        rewardTarget: "profile",
+    });
+    await distributeProfileandVoiceroomRewards({
+        leaderboardPath: "leaderboardsV1/room/total",
+        topN: 10,
+        rewardId: `monthly-total-${monthKey}-voice_room`,
+        rewardTarget: "voice_room",
     });
 });
 
@@ -455,7 +474,7 @@ function resolveGiftSoul(gift) {
     return 0;
 }
 
-async function distributeProfileRewards({ leaderboardPath, topN, rewardId }) {
+async function distributeProfileandVoiceroomRewards({ leaderboardPath, topN, rewardId, rewardTarget }) {
     const guardRef = admin.database().ref(`rewardsV1/distributions/${rewardId}`);
     const guardSnap = await guardRef.once("value");
     if (guardSnap.exists()) return;
@@ -476,22 +495,27 @@ async function distributeProfileRewards({ leaderboardPath, topN, rewardId }) {
 
     const updates = {};
     const periodType = rewardPeriodType(rewardId);
-    const rewardTitle = rewardTitleForPeriod(periodType, topN);
-    winners.forEach((w, idx) => {
+    const rewardTitle = rewardTitleForPeriod(periodType, topN, rewardTarget);
+    for (let idx = 0; idx < winners.length; idx++) {
+        const w = winners[idx];
+        const recipientUid = await resolveRewardRecipientUid(w.uid, rewardTarget);
+        if (!recipientUid) continue;
         const coinReward = Math.floor(w.soul * 0.10);
         const soulReward = Math.floor(w.soul * 0.05);
         const rank = idx + 1;
-        updates[`users/${w.uid}/totalWinnings`] = admin.database.ServerValue.increment(coinReward);
-        updates[`users/${w.uid}/soul`] = admin.database.ServerValue.increment(soulReward);
-        updates[`rewardsV1/history/${rewardId}/${w.uid}`] = {
+        updates[`users/${recipientUid}/totalWinnings`] = admin.database.ServerValue.increment(coinReward);
+        updates[`users/${recipientUid}/soul`] = admin.database.ServerValue.increment(soulReward);
+        updates[`rewardsV1/history/${rewardId}/${recipientUid}`] = {
             rank,
             sourceSoul: w.soul,
             coinReward,
             soulReward,
             periodType,
+            rewardTarget,
+            sourceId: w.uid,
             createdAt: admin.database.ServerValue.TIMESTAMP,
         };
-        updates[`users/${w.uid}/rewardInbox/${rewardId}`] = {
+        updates[`users/${recipientUid}/rewardInbox/${rewardId}`] = {
             rewardId,
             title: rewardTitle,
             periodType,
@@ -499,10 +523,12 @@ async function distributeProfileRewards({ leaderboardPath, topN, rewardId }) {
             sourceSoul: w.soul,
             coinReward,
             soulReward,
+            rewardTarget,
+            sourceId: w.uid,
             read: false,
             createdAt: admin.database.ServerValue.TIMESTAMP,
         };
-        updates[`users/${w.uid}/judgeBotMessages/${rewardId}`] = {
+        updates[`users/${recipientUid}/judgeBotMessages/${rewardId}`] = {
             fromUid: "judge_bot",
             fromName: "Judge Bot",
             type: "reward_notice",
@@ -514,15 +540,18 @@ async function distributeProfileRewards({ leaderboardPath, topN, rewardId }) {
             sourceSoul: w.soul,
             coinReward,
             soulReward,
+            rewardTarget,
+            sourceId: w.uid,
             read: false,
             createdAt: admin.database.ServerValue.TIMESTAMP,
         };
-    });
+    }
     updates[`rewardsV1/distributions/${rewardId}`] = {
         appliedAt: admin.database.ServerValue.TIMESTAMP,
-        winners: winners.length,
+        winners: Object.keys(updates).filter((key) => key.startsWith("users/") && key.endsWith("/rewardInbox/" + rewardId)).length,
         topN,
         leaderboardPath,
+        rewardTarget,
     };
     await admin.database().ref().update(updates);
 }
@@ -535,11 +564,19 @@ function rewardPeriodType(rewardId) {
     return "unknown";
 }
 
-function rewardTitleForPeriod(periodType, topN) {
-    if (periodType === "daily") return `Daily Top ${topN} Reward`;
-    if (periodType === "weekly") return `Weekly Top ${topN} Reward`;
-    if (periodType === "monthly") return `Monthly Top ${topN} Reward`;
-    return `Top ${topN} Reward`;
+function rewardTitleForPeriod(periodType, topN, rewardTarget) {
+    const targetLabel = rewardTarget === "voice_room" ? "Voice Room" : "Profile";
+    if (periodType === "daily") return `${targetLabel} Daily Top ${topN} Reward`;
+    if (periodType === "weekly") return `${targetLabel} Weekly Top ${topN} Reward`;
+    if (periodType === "monthly") return `${targetLabel} Monthly Top ${topN} Reward`;
+    return `${targetLabel} Top ${topN} Reward`;
+}
+
+async function resolveRewardRecipientUid(sourceId, rewardTarget) {
+    if (rewardTarget !== "voice_room") return sourceId;
+    const roomSnap = await admin.database().ref(`voiceRooms/${sourceId}`).once("value");
+    const ownerUid = roomSnap.child("ownerUid").val();
+    return typeof ownerUid === "string" && ownerUid.trim() ? ownerUid.trim() : null;
 }
 
 
