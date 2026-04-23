@@ -27,6 +27,7 @@ import com.souljoy.soulmasti.ui.league.RewardInboxViewModel
 import com.souljoy.soulmasti.ui.rewards.DailyRewardsViewModel
 import com.souljoy.soulmasti.ui.settings.SettingsViewModel
 import com.souljoy.soulmasti.ui.shop.GoldShopViewModel
+import com.souljoy.soulmasti.ui.soulmasti.shopping.SoulMastiShoppingViewModel
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsViewModel
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomViewModel
@@ -50,6 +51,7 @@ val appModule = module {
     viewModel { HomeViewModel(androidApplication(), get()) }
     viewModel { DailyRewardsViewModel(androidApplication(), get(), get()) }
     viewModel { GoldShopViewModel(get(), get(), get()) }
+    viewModel { SoulMastiShoppingViewModel(get(), get()) }
     viewModel { AuthGateViewModel(get(), get()) }
     viewModel { LoginViewModel(get()) }
     viewModel { CreateProfileViewModel(androidApplication(), get(), get(), get()) }

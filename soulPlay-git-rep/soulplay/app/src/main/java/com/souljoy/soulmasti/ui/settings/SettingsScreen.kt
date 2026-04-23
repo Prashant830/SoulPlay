@@ -126,6 +126,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = koinViewModel(),
     onLogout: () -> Unit = {},
     onOpenUserProfile: (String) -> Unit = {},
+    onOpenShop: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val socialRepository: SocialRepository = koinInject()
@@ -205,7 +206,7 @@ fun SettingsScreen(
         }
         item {
             ShortcutRow(
-                onShopClick = {},
+                onShopClick = onOpenShop,
                 onStatsClick = { showStatsDialog = true },
                 onGiftClick = { showGiftHistoryDialog = true }
             )

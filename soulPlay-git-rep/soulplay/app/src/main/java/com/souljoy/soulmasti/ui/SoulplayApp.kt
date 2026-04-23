@@ -61,6 +61,7 @@ import com.souljoy.soulmasti.ui.rewards.DailyRewardsScreen
 import com.souljoy.soulmasti.ui.settings.SettingsScreen
 import com.souljoy.soulmasti.ui.settings.UserProfileScreen
 import com.souljoy.soulmasti.ui.shop.GoldShopScreen
+import com.souljoy.soulmasti.ui.soulmasti.shopping.SoulMastiShoppingScreen
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomNeedMatchScreen
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomScreen
 import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
@@ -128,6 +129,7 @@ fun SoulplayApp(
             route.contains("user_profile") ||
             route.contains(SoulplayDestinations.League) ||
             route.contains(SoulplayDestinations.GoldShop) ||
+            route.contains(SoulplayDestinations.SoulMastiShopping) ||
             route.contains(SoulplayDestinations.DailyRewards)
     val showBottomBar = !hideBottomBar
 
@@ -297,6 +299,14 @@ fun SoulplayApp(
             composable(SoulplayDestinations.GoldShop) {
                 GoldShopScreen(
                     onBack = { navController.popBackStack() },
+                )
+            }
+            composable(SoulplayDestinations.SoulMastiShopping) {
+                SoulMastiShoppingScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenAdsTab = {
+                        navController.navigate(SoulplayDestinations.DailyRewards) { launchSingleTop = true }
+                    },
                 )
             }
             composable(SoulplayDestinations.DailyRewards) {
@@ -496,6 +506,9 @@ fun SoulplayApp(
                         if (uid.isNotBlank()) {
                             navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
                         }
+                    },
+                    onOpenShop = {
+                        navController.navigate(SoulplayDestinations.SoulMastiShopping) { launchSingleTop = true }
                     },
                 )
             }

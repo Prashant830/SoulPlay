@@ -7,6 +7,7 @@ object SoulplayDestinations {
 
     const val Home = "home"
     const val GoldShop = "gold_shop"
+    const val SoulMastiShopping = "soulmasti_shopping"
     const val VoiceRoom = "voice_room"
     const val VoiceRoomWithId = "voice_room/{roomId}"
     const val SocialVoiceHub = "social_voice_hub"

@@ -153,6 +153,7 @@ fun SocialVoiceRoomScreen(
     val incomingInvite by viewModel.incomingInvite.collectAsStateWithLifecycle()
     val userProfiles by viewModel.userProfiles.collectAsStateWithLifecycle()
     val coinBalance by viewModel.coinBalance.collectAsStateWithLifecycle()
+    val shopCosmetics by viewModel.activeShopCosmetics.collectAsStateWithLifecycle()
     var draft by remember { mutableStateOf("") }
     val myUid = viewModel.myUid
     var showRoomMenu by remember { mutableStateOf(false) }
@@ -222,7 +223,8 @@ fun SocialVoiceRoomScreen(
             ?.takeIf { liveRoomLevel >= it.unlockLevel }
     val freeBackgroundOption = RoomBackgroundOptions.firstOrNull { it.name.equals("Free", ignoreCase = true) } ?: RoomBackgroundOptions.first()
     val activeBackgroundOption = savedBackgroundOption ?: freeBackgroundOption
-    val liveRoomBackgroundColors = activeBackgroundOption.colors
+    val liveRoomBackgroundColors = roomShopBackgroundColors(shopCosmetics.roomBackgroundItemId) ?: activeBackgroundOption.colors
+    val seatAccentColor = Color(0xFFD1B96D)
     val topContributors = remember(room) {
         room?.contributionTotalSoul
             .orEmpty()
@@ -458,6 +460,7 @@ fun SocialVoiceRoomScreen(
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
+                    seatAccentColor = seatAccentColor,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 RoomSeatRow(
@@ -473,6 +476,7 @@ fun SocialVoiceRoomScreen(
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
+                    seatAccentColor = seatAccentColor,
                     isCompact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -489,6 +493,7 @@ fun SocialVoiceRoomScreen(
                     displayNameForUid = { uid -> uid?.let { userProfiles[it]?.name } },
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
+                    seatAccentColor = seatAccentColor,
                     isCompact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -531,7 +536,7 @@ fun SocialVoiceRoomScreen(
                                             senderSoul = viewModel.userSoul(item.message.fromUid),
                                             message = item.message.text,
                                             onProfileClick = { profilePreviewUid = item.message.fromUid },
-                                        onBadgeClick = { onOpenSoulLevel(item.message.fromUid) },
+                                            onBadgeClick = { onOpenSoulLevel(item.message.fromUid) },
                                         )
                                     }
                                     is ChatFeedItem.GiftMessage -> {
@@ -542,8 +547,8 @@ fun SocialVoiceRoomScreen(
                                             recipientName = item.event.toUserId?.let { viewModel.displayName(it) }.orEmpty(),
                                             senderPhotoUrl = viewModel.profileImageUrl(item.event.fromUserId),
                                             summaryText = viewModel.giftSummaryText(item.event),
-                                        onProfileClick = { profilePreviewUid = item.event.fromUserId },
-                                        onBadgeClick = { onOpenSoulLevel(item.event.fromUserId) },
+                                            onProfileClick = { profilePreviewUid = item.event.fromUserId },
+                                            onBadgeClick = { onOpenSoulLevel(item.event.fromUserId) },
                                         )
                                     }
                                 }
@@ -1703,6 +1708,22 @@ private fun roomBackgroundColorsForName(name: String?): List<Color>? {
     return RoomBackgroundOptions.firstOrNull { it.name.equals(safe, ignoreCase = true) }?.colors
 }
 
+private fun roomShopBackgroundColors(itemId: String?): List<Color>? = when (itemId) {
+    "bg_golden_brick" -> listOf(Color(0xFF2B1A06), Color(0xFF9A6C1F), Color(0xFFE7BF58))
+    "bg_emperor_castle" -> listOf(Color(0xFF1B0F05), Color(0xFF6B4A19), Color(0xFFD8B673))
+    "bg_summer_breeze" -> listOf(Color(0xFF6D5DF6), Color(0xFFD6A2F3), Color(0xFF8BD5FF))
+    "bg_mountains" -> listOf(Color(0xFF111827), Color(0xFF334155), Color(0xFF38BDF8))
+    "bg_nature" -> listOf(Color(0xFF052E16), Color(0xFF166534), Color(0xFF4ADE80))
+    "bg_mahel" -> listOf(Color(0xFF2A0A00), Color(0xFF7C2D12), Color(0xFFFFB347))
+    "bg_midnight_blue" -> listOf(Color(0xFF0B1027), Color(0xFF1E3A8A), Color(0xFF60A5FA))
+    "bg_rose_dream" -> listOf(Color(0xFF831843), Color(0xFFDB2777), Color(0xFFF9A8D4))
+    "bg_crystal_ice" -> listOf(Color(0xFF0F172A), Color(0xFF0891B2), Color(0xFFBAE6FD))
+    "bg_sunset_gold" -> listOf(Color(0xFF7C2D12), Color(0xFFF59E0B), Color(0xFFFDE68A))
+    "bg_royal_purple" -> listOf(Color(0xFF2E1065), Color(0xFF7E22CE), Color(0xFFC4B5FD))
+    "bg_neon_city" -> listOf(Color(0xFF020617), Color(0xFF0EA5E9), Color(0xFFA78BFA))
+    else -> null
+}
+
 private fun roomBackgroundOptionForName(name: String?): RoomBackgroundOption? {
     val safe = name?.takeIf { it.isNotBlank() } ?: return null
     return RoomBackgroundOptions.firstOrNull { it.name.equals(safe, ignoreCase = true) }
@@ -2351,6 +2372,7 @@ private fun RoomSeatRow(
     displayNameForUid: (String?) -> String?,
     profileUrlForUid: (String?) -> String?,
     ownerOnline: Boolean,
+    seatAccentColor: Color,
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
 ) {
@@ -2399,9 +2421,7 @@ private fun RoomSeatRow(
                             .size(if (isCompact) 46.dp else 58.dp)
                             .border(
                                 width = if (isSpeaking(speakingUid)) 2.dp else 1.dp,
-                                color = if (isSpeaking(speakingUid)) Color(0xFF22D3EE) else Color(
-                                    0xFFD1B96D
-                                ),
+                                color = if (isSpeaking(speakingUid)) Color(0xFF22D3EE) else seatAccentColor,
                                 shape = RoundedCornerShape(999.dp),
                             )
                             .background(

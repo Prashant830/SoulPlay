@@ -4,7 +4,10 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ValueEventListener
 import com.google.firebase.storage.FirebaseStorage
 import com.souljoy.soulmasti.BuildConfig
 import com.souljoy.soulmasti.data.firebase.FirebaseUidMapping
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -55,6 +59,10 @@ class SocialVoiceRoomViewModel(
     val userProfiles: StateFlow<Map<String, SeatUserProfile>> = _userProfiles.asStateFlow()
     private val _coinBalance = MutableStateFlow<Long?>(null)
     val coinBalance: StateFlow<Long?> = _coinBalance.asStateFlow()
+    private val _activeShopCosmetics = MutableStateFlow(ActiveVoiceRoomShopCosmetics())
+    val activeShopCosmetics: StateFlow<ActiveVoiceRoomShopCosmetics> = _activeShopCosmetics.asStateFlow()
+    private var shopCosmeticsOwnerUid: String? = null
+    private var shopCosmeticsListener: ValueEventListener? = null
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -100,6 +108,12 @@ class SocialVoiceRoomViewModel(
                             snap?.contributionTotalSoul?.keys.orEmpty()
                         ).toSet(),
                 )
+                val cosmeticsOwnerUid = snap?.ownerUid?.takeIf { it.isNotBlank() } ?: myUid
+                if (!cosmeticsOwnerUid.isNullOrBlank()) {
+                    observeActiveShopCosmetics(cosmeticsOwnerUid)
+                } else {
+                    _activeShopCosmetics.update { ActiveVoiceRoomShopCosmetics() }
+                }
                 val uid = myUid
                 if (uid != null) {
                     val mySeat = snap?.seats?.firstOrNull { it.occupantUid == uid }
@@ -342,6 +356,7 @@ class SocialVoiceRoomViewModel(
             repository.updateRoomBackgroundName(roomId, backgroundName).onFailure {
                 _error.value = it.message ?: "Could not update room background"
             }.onSuccess {
+                disablePurchasedVoiceColorUsing()
                 _toastEvents.tryEmit("Room background updated")
             }
         }
@@ -349,6 +364,7 @@ class SocialVoiceRoomViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        detachShopCosmeticsListener()
         setPresence(false)
         voiceRoomRepository.leave()
     }
@@ -415,6 +431,62 @@ class SocialVoiceRoomViewModel(
         }
     }
 
+    private fun observeActiveShopCosmetics(uid: String) {
+        if (shopCosmeticsOwnerUid == uid && shopCosmeticsListener != null) return
+        detachShopCosmeticsListener()
+        shopCosmeticsOwnerUid = uid
+        val ref = database.reference.child("users").child(uid).child("voiceRoomShopV1")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _activeShopCosmetics.value = parseActiveShopCosmetics(snapshot)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                _error.value = error.message.ifBlank { "Could not load active shop cosmetics" }
+            }
+        }
+        ref.addValueEventListener(listener)
+        shopCosmeticsListener = listener
+    }
+
+    private fun detachShopCosmeticsListener() {
+        val uid = shopCosmeticsOwnerUid ?: return
+        val listener = shopCosmeticsListener ?: return
+        database.reference.child("users").child(uid).child("voiceRoomShopV1").removeEventListener(listener)
+        shopCosmeticsListener = null
+        shopCosmeticsOwnerUid = null
+    }
+
+    private fun parseActiveShopCosmetics(root: DataSnapshot): ActiveVoiceRoomShopCosmetics {
+        val now = System.currentTimeMillis()
+        val purchaseVoiceColorUsing = root.child("purchaseVoiceColorUsing").getValue(Boolean::class.java) == true
+        fun activeItemIfValid(category: String): String? {
+            if (!purchaseVoiceColorUsing) return null
+            val itemId = root.child("active").child(category).child("itemId").getValue(String::class.java).orEmpty()
+            if (itemId.isBlank()) return null
+            val expiresAt = root.child("purchases").child(itemId).child("expiresAt").getValue(Long::class.java) ?: 0L
+            return if (expiresAt > now) itemId else null
+        }
+        return ActiveVoiceRoomShopCosmetics(
+            roomBackgroundItemId = activeItemIfValid("ROOM_BACKGROUND"),
+        )
+    }
+
+    private fun disablePurchasedVoiceColorUsing() {
+        val uid = myUid ?: return
+        viewModelScope.launch {
+            runCatching {
+                database.reference
+                    .child("users")
+                    .child(uid)
+                    .child("voiceRoomShopV1")
+                    .child("purchaseVoiceColorUsing")
+                    .setValue(false)
+                    .await()
+            }
+        }
+    }
+
     fun giftSummaryText(event: GiftEvent): String {
         val giftName = GiftCatalog.displayLabel(event.giftId)
         val sender = displayName(event.fromUserId)
@@ -446,5 +518,9 @@ data class SeatUserProfile(
     val name: String,
     val photoUrl: String,
     val soul: Long,
+)
+
+data class ActiveVoiceRoomShopCosmetics(
+    val roomBackgroundItemId: String? = null,
 )
 
