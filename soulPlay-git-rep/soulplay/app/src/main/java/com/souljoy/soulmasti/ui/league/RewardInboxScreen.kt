@@ -22,6 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -31,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.text.ifBlank
 
 @Composable
 fun RewardInboxScreen(
@@ -39,6 +43,14 @@ fun RewardInboxScreen(
     modifier: Modifier = Modifier,
 ) {
     val items by viewModel.items.collectAsStateWithLifecycle()
+    var selectedFilter by remember { mutableStateOf("all") }
+    val filteredItems = remember(items, selectedFilter) {
+        when (selectedFilter) {
+            "voice_room" -> items.filter { it.rewardTarget == "voice_room" }
+            "profile" -> items.filter { it.rewardTarget != "voice_room" }
+            else -> items
+        }
+    }
     Column(
         modifier = modifier.fillMaxSize().background(Color(0xFFF3F4F6)),
     ) {
@@ -56,14 +68,19 @@ fun RewardInboxScreen(
             Text("Reward History", color = Color.White, style = MaterialTheme.typography.titleLarge)
         }
 
-        if (items.isEmpty()) {
+        RewardFilterRow(
+            selected = selectedFilter,
+            onSelected = { selectedFilter = it },
+        )
+
+        if (filteredItems.isEmpty()) {
             Text("No rewards yet.", modifier = Modifier.padding(16.dp), color = Color(0xFF6B7280))
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                items(items, key = { it.rewardId }) { item ->
+                items(filteredItems, key = { it.rewardId }) { item ->
                     Card(
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = if (item.read) Color.White else Color(0xFFF5F3FF)),
@@ -72,6 +89,12 @@ fun RewardInboxScreen(
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(item.title, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                             Text("Rank #${item.rank} • ${item.periodType}", color = Color(0xFF6B7280))
+                            if (item.rewardTarget == "voice_room") {
+                                val roomLabel = item.sourceId.ifBlank { "Room" }
+                                Text("Voice Room • $roomLabel", color = Color(0xFF2563EB))
+                            } else {
+                                Text("Profile Reward", color = Color(0xFF2563EB))
+                            }
                             Text("Reward: +${item.coinReward} coins, +${item.soulReward} soul", color = Color(0xFF7C3AED))
                             Text("Source soul: ${item.sourceSoul}", color = Color(0xFF6B7280))
                             if (item.createdAt > 0L) {
@@ -83,6 +106,57 @@ fun RewardInboxScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RewardFilterRow(
+    selected: String,
+    onSelected: (String) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        FilterChip(
+            text = "All",
+            selected = selected == "all",
+            onClick = { onSelected("all") },
+        )
+        FilterChip(
+            text = "Voice Room",
+            selected = selected == "voice_room",
+            onClick = { onSelected("voice_room") },
+        )
+        FilterChip(
+            text = "Profile",
+            selected = selected == "profile",
+            onClick = { onSelected("profile") },
+        )
+    }
+}
+
+@Composable
+private fun FilterChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Card(
+        shape = RoundedCornerShape(999.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) Color(0xFF7C3AED) else Color.White,
+        ),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Text(
+            text = text,
+            color = if (selected) Color.White else Color(0xFF6B7280),
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+        )
     }
 }
 
