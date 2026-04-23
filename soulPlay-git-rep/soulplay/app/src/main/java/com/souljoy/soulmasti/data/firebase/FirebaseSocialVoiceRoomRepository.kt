@@ -2,6 +2,7 @@ package com.souljoy.soulmasti.data.firebase
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseReference
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.MutableData
@@ -127,6 +128,13 @@ class FirebaseSocialVoiceRoomRepository(
         val ref = roomRef.child("presence").child(uid)
         val currentRoomRef = database.reference.child("users").child(uid).child("currentSocialRoomId")
         if (online) {
+            val previousRoomId = currentRoomRef.get().await().getValue(String::class.java).orEmpty()
+            if (previousRoomId.isNotBlank() && previousRoomId != roomId) {
+                val previousRoomRef = database.reference.child("voiceRooms").child(previousRoomId)
+                // Ensure user is not kept online/occupied in an old room after switching.
+                previousRoomRef.child("presence").child(uid).removeValue().await()
+                clearUserSeatInRoom(previousRoomRef, uid)
+            }
             ref.setValue(true).await()
             ref.onDisconnect().removeValue()
             currentRoomRef.setValue(roomId).await()
@@ -141,6 +149,28 @@ class FirebaseSocialVoiceRoomRepository(
             ref.removeValue().await()
             val current = currentRoomRef.get().await().getValue(String::class.java).orEmpty()
             if (current == roomId) currentRoomRef.removeValue().await()
+            val ownerUid = roomRef.child("ownerUid").get().await().getValue(String::class.java).orEmpty()
+            if (ownerUid == uid) {
+                // Any owner leave path should collapse room and clear all seats/presence.
+                collapseRoomIfOwnerLeft(roomId).getOrThrow()
+            }
+        }
+    }
+
+    private suspend fun clearUserSeatInRoom(roomRef: DatabaseReference, uid: String) {
+        val seatsSnap = roomRef.child("seats").get().await()
+        for (seatSnap in seatsSnap.children) {
+            val seatNo = seatSnap.key?.toIntOrNull() ?: continue
+            if (seatNo == 1) continue
+            val occupantUid = seatSnap.child("uid").getValue(String::class.java).orEmpty()
+            if (occupantUid != uid) continue
+            roomRef.child("seats").child(seatNo.toString()).updateChildren(
+                mapOf(
+                    "uid" to "",
+                    "muted" to false,
+                    "updatedAt" to ServerValue.TIMESTAMP,
+                ),
+            ).await()
         }
     }
 
@@ -463,6 +493,7 @@ class FirebaseSocialVoiceRoomRepository(
             "collapsed" to true,
             "chat" to null,
             "seatInvites" to null,
+            "presence/$uid" to null,
         )
         roomSnap.child("seats").children.forEach { child ->
             val key = child.key ?: return@forEach
@@ -533,10 +564,13 @@ class FirebaseSocialVoiceRoomRepository(
             "Room ${roomId.takeLast(6)}"
         }
         val adminUids = readAdminUids(snap)
-        val onlineUids = snap.child("presence").children.mapNotNull { it.key }.toSet()
+        val onlineUids = snap.child("presence").children.mapNotNull { child ->
+            val isOnline = child.getValue(Boolean::class.java) == true
+            child.key?.takeIf { isOnline }
+        }.toSet()
         val ownerOnline = onlineUids.contains(ownerUid)
         val collapsed = snap.child("collapsed").getValue(Boolean::class.java) == true || !ownerOnline
-        val onlineCount = snap.child("presence").childrenCount.toInt()
+        val onlineCount = onlineUids.size
         val nowMs = System.currentTimeMillis()
         val currentDailyKey = utcDayKey(nowMs)
         val currentWeeklyKey = utcWeekKey(nowMs)

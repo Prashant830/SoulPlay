@@ -43,6 +43,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.souljoy.soulmasti.ui.chat.ChatScreen
+import com.souljoy.soulmasti.ui.chat.PendingRoomInvite
 import com.souljoy.soulmasti.ui.chat.ChatThreadScreen
 import com.souljoy.soulmasti.ui.chat.ChatThreadViewModel
 import com.souljoy.soulmasti.ui.chat.ChatViewModel
@@ -68,6 +69,7 @@ import com.souljoy.soulmasti.ui.voice.game.VoiceRoomViewModel
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomScreen
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomViewModel
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsScreen
+import com.souljoy.soulmasti.domain.repository.SocialVoiceRoomRepository
 import com.souljoy.soulmasti.ui.voice.social.SocialVoiceRoomsViewModel
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -93,6 +95,12 @@ private val bottomTabs = listOf(
     BottomTab(SoulplayDestinations.Settings, "Profile", Icons.Filled.Person)
 )
 
+private data class LeaveRoomRequest(
+    val currentRoomId: String,
+    val targetRoomId: String? = null,
+    val exitCurrentScreen: Boolean = false,
+)
+
 @Composable
 fun SoulplayApp(
     hasVoicePermission: () -> Boolean,
@@ -108,10 +116,12 @@ fun SoulplayApp(
         }
     }
     val socialRepository: SocialRepository = koinInject<SocialRepository>()
+    val socialVoiceRoomRepository: SocialVoiceRoomRepository = koinInject()
     val firebaseAuth: FirebaseAuth = koinInject<FirebaseAuth>()
     val firebaseDatabase: FirebaseDatabase = koinInject<FirebaseDatabase>()
     val scope = rememberCoroutineScope()
-    var leagueRoomSwitchTarget by remember { mutableStateOf<String?>(null) }
+    var leaveRoomRequest by remember { mutableStateOf<LeaveRoomRequest?>(null) }
+    var pendingRoomInviteForChat by remember { mutableStateOf<PendingRoomInvite?>(null) }
     val incomingFriendRequests by socialRepository.incomingFriendRequests.collectAsStateWithLifecycle()
     val unreadByPeer by socialRepository.unreadMessageCounts.collectAsStateWithLifecycle()
     val friendRequestBadgeCount = incomingFriendRequests.size
@@ -342,7 +352,10 @@ fun SoulplayApp(
                                 if (currentRoomId.isBlank() || currentRoomId == roomId) {
                                     navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
                                 } else {
-                                    leagueRoomSwitchTarget = roomId
+                                    leaveRoomRequest = LeaveRoomRequest(
+                                        currentRoomId = currentRoomId,
+                                        targetRoomId = roomId,
+                                    )
                                 }
                             }
                         }
@@ -442,6 +455,22 @@ fun SoulplayApp(
                         hasVoicePermission = hasVoicePermission,
                         requestVoicePermission = requestVoicePermission,
                         onBack = { navController.popBackStack() },
+                        onInviteFriends = { roomId, roomName, roomPhotoUrl ->
+                            pendingRoomInviteForChat = PendingRoomInvite(
+                                roomId = roomId,
+                                roomName = roomName,
+                                roomPhotoUrl = roomPhotoUrl,
+                            )
+                            navController.navigate(SoulplayDestinations.Chat) {
+                                launchSingleTop = true
+                            }
+                        },
+                        onRequestExitRoom = { currentRoomId ->
+                            leaveRoomRequest = LeaveRoomRequest(
+                                currentRoomId = currentRoomId,
+                                exitCurrentScreen = true,
+                            )
+                        },
                         onOpenUserProfile = { uid ->
                             if (uid.isNotBlank()) {
                                 navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
@@ -487,6 +516,36 @@ fun SoulplayApp(
                     ChatThreadScreen(
                         viewModel = threadVm,
                         onBack = { navController.popBackStack() },
+                        pendingRoomInvite = pendingRoomInviteForChat,
+                        onPendingRoomInviteConsumed = { pendingRoomInviteForChat = null },
+                        onJoinVoiceRoom = { roomId ->
+                            if (roomId.isBlank()) return@ChatThreadScreen
+                            scope.launch {
+                                val uid = firebaseAuth.currentUser?.uid.orEmpty()
+                                if (uid.isBlank()) {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                                    return@launch
+                                }
+                                val currentRoomId = runCatching {
+                                    firebaseDatabase.reference
+                                        .child("users")
+                                        .child(uid)
+                                        .child("currentSocialRoomId")
+                                        .get()
+                                        .await()
+                                        .getValue(String::class.java)
+                                        .orEmpty()
+                                }.getOrDefault("")
+                                if (currentRoomId.isBlank() || currentRoomId == roomId) {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(roomId)) { launchSingleTop = true }
+                                } else {
+                                    leaveRoomRequest = LeaveRoomRequest(
+                                        currentRoomId = currentRoomId,
+                                        targetRoomId = roomId,
+                                    )
+                                }
+                            }
+                        },
                         onOpenPeerProfile = { uid ->
                             if (uid.isNotBlank()) {
                                 navController.navigate(SoulplayDestinations.userProfile(uid)) { launchSingleTop = true }
@@ -537,21 +596,73 @@ fun SoulplayApp(
         }
     }
 
-    leagueRoomSwitchTarget?.let { targetRoomId ->
+    leaveRoomRequest?.let { request ->
         AlertDialog(
-            onDismissRequest = { leagueRoomSwitchTarget = null },
-            title = { Text("Switch room?") },
-            text = { Text("You are already in another voice room. Joining this one will leave your old room. Continue?") },
+            onDismissRequest = { leaveRoomRequest = null },
+            title = { Text("Leave room?") },
+            text = { Text("You need to leave this room first. Continue?") },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        leagueRoomSwitchTarget = null
-                        navController.navigate(SoulplayDestinations.socialVoiceRoom(targetRoomId)) { launchSingleTop = true }
+                        val currentRoomId = request.currentRoomId
+                        val targetRoomId = request.targetRoomId
+                        val exitCurrentScreen = request.exitCurrentScreen
+                        leaveRoomRequest = null
+                        scope.launch {
+                            val uid = firebaseAuth.currentUser?.uid.orEmpty()
+                            if (uid.isNotBlank() && currentRoomId.isNotBlank()) {
+                                val ownerUid = runCatching {
+                                    firebaseDatabase.reference
+                                        .child("voiceRooms")
+                                        .child(currentRoomId)
+                                        .child("ownerUid")
+                                        .get()
+                                        .await()
+                                        .getValue(String::class.java)
+                                        .orEmpty()
+                                }.getOrDefault("")
+                                val seatsSnap = runCatching {
+                                    firebaseDatabase.reference
+                                        .child("voiceRooms")
+                                        .child(currentRoomId)
+                                        .child("seats")
+                                        .get()
+                                        .await()
+                                }.getOrNull()
+                                val mySeatNo = seatsSnap?.children
+                                    ?.firstOrNull {
+                                        val seatNo = it.key?.toIntOrNull() ?: return@firstOrNull false
+                                        val occupantUid = it.child("uid").getValue(String::class.java).orEmpty()
+                                        seatNo != 1 && occupantUid == uid
+                                    }
+                                    ?.key
+                                    ?.toIntOrNull()
+                                if (mySeatNo != null) {
+                                    runCatching { socialVoiceRoomRepository.leaveSeat(currentRoomId, mySeatNo) }
+                                }
+                                if (ownerUid == uid) {
+                                    runCatching { socialVoiceRoomRepository.collapseRoomIfOwnerLeft(currentRoomId) }
+                                }
+                                runCatching { socialVoiceRoomRepository.dismissMyPendingSeatInvites(currentRoomId) }
+                                runCatching { socialVoiceRoomRepository.markMyChatCleared(currentRoomId) }
+                                runCatching { socialVoiceRoomRepository.setRoomPresence(currentRoomId, false) }
+                            }
+                            when {
+                                !targetRoomId.isNullOrBlank() -> {
+                                    navController.navigate(SoulplayDestinations.socialVoiceRoom(targetRoomId)) {
+                                        launchSingleTop = true
+                                    }
+                                }
+                                exitCurrentScreen -> {
+                                    navController.popBackStack()
+                                }
+                            }
+                        }
                     },
                 ) { Text("Yes") }
             },
             dismissButton = {
-                TextButton(onClick = { leagueRoomSwitchTarget = null }) { Text("No") }
+                TextButton(onClick = { leaveRoomRequest = null }) { Text("No") }
             },
         )
     }

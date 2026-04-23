@@ -80,6 +80,23 @@ class ChatThreadViewModel(
         }
     }
 
+    fun sendRoomInvite(
+        roomId: String,
+        roomName: String,
+        roomPhotoUrl: String?,
+    ) {
+        val safeRoomId = roomId.trim()
+        if (safeRoomId.isBlank()) return
+        val safeRoomName = roomName.trim().ifBlank { "Voice Room" }
+        val safePhoto = roomPhotoUrl?.trim().orEmpty()
+        val payload = buildRoomInviteMessageText(
+            roomId = safeRoomId,
+            roomName = safeRoomName,
+            roomPhotoUrl = safePhoto,
+        )
+        send(payload)
+    }
+
     suspend fun sendGift(giftId: String, selectedCount: Int): Result<Unit> {
         val me = auth.currentUser?.uid ?: return Result.failure(IllegalStateException("Not signed in"))
         val chatId = directChatId(me, peerUid)
@@ -135,3 +152,9 @@ private fun buildGiftMessageText(
     receiverSoul: Long,
     selectedCount: Int,
 ): String = "GIFT|$giftId|$giftLabel|$giftCoins|$receiverCoins|$receiverSoul|$selectedCount"
+
+private fun buildRoomInviteMessageText(
+    roomId: String,
+    roomName: String,
+    roomPhotoUrl: String,
+): String = "ROOM_INVITE|$roomId|$roomName|$roomPhotoUrl"

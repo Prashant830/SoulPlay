@@ -449,7 +449,7 @@ private fun FullPreviewCard(item: VoiceRoomShopItem) {
             .background(Brush.verticalGradient(colors), RoundedCornerShape(12.dp)),
     ) {
         Text(
-            text = "Welcome to SoulMast",
+            text = "Welcome to SoulMasti",
             color = Color.White.copy(alpha = 0.92f),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(start = 14.dp, top = 14.dp),
@@ -504,7 +504,7 @@ private fun FullPreviewCard(item: VoiceRoomShopItem) {
         )
 
         Text(
-            text = "System: Welcome to SoulMast Voice\nRoom.",
+            text = "System: Welcome to SoulMast Voice Room.",
             color = Color.White,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier

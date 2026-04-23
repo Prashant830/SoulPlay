@@ -1,6 +1,8 @@
 package com.souljoy.soulmasti.ui.chat
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -40,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.souljoy.soulmasti.R
@@ -65,6 +69,9 @@ private val GiftOtherEnd = Color(0xFFE2E8F0)
 fun ChatThreadScreen(
     viewModel: ChatThreadViewModel,
     onBack: () -> Unit,
+    pendingRoomInvite: PendingRoomInvite? = null,
+    onPendingRoomInviteConsumed: () -> Unit = {},
+    onJoinVoiceRoom: (String) -> Unit = {},
     onOpenPeerProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -128,6 +135,16 @@ fun ChatThreadScreen(
         }
     }
 
+    LaunchedEffect(pendingRoomInvite, viewModel.peerUid) {
+        val invite = pendingRoomInvite ?: return@LaunchedEffect
+        viewModel.sendRoomInvite(
+            roomId = invite.roomId,
+            roomName = invite.roomName,
+            roomPhotoUrl = invite.roomPhotoUrl,
+        )
+        onPendingRoomInviteConsumed()
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -184,23 +201,32 @@ fun ChatThreadScreen(
                                 modifier = Modifier.widthIn(max = 300.dp)
                             )
                         } else {
-                            Text(
-                                text = msg.text,
-                                modifier = Modifier
-                                    .widthIn(max = 300.dp)
-                                    .background(
-                                        color = if (mine) BubbleMeBlue else BubbleOtherGray,
-                                        shape = RoundedCornerShape(
-                                            topStart = 16.dp,
-                                            topEnd = 16.dp,
-                                            bottomStart = if (mine) 4.dp else 16.dp,
-                                            bottomEnd = if (mine) 16.dp else 4.dp
+                            val roomInvite = parseRoomInviteChatPayload(msg.text)
+                            if (roomInvite != null) {
+                                RoomInviteMessageBubble(
+                                    info = roomInvite,
+                                    modifier = Modifier.widthIn(max = 300.dp),
+                                    onJoinClick = { onJoinVoiceRoom(roomInvite.roomId) },
+                                )
+                            } else {
+                                Text(
+                                    text = msg.text,
+                                    modifier = Modifier
+                                        .widthIn(max = 300.dp)
+                                        .background(
+                                            color = if (mine) BubbleMeBlue else BubbleOtherGray,
+                                            shape = RoundedCornerShape(
+                                                topStart = 16.dp,
+                                                topEnd = 16.dp,
+                                                bottomStart = if (mine) 4.dp else 16.dp,
+                                                bottomEnd = if (mine) 16.dp else 4.dp
+                                            )
                                         )
-                                    )
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
-                            )
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (mine) BubbleMeOnBlue else BubbleOtherOnGray
+                                )
+                            }
                         }
                     }
                 }
@@ -276,6 +302,12 @@ fun ChatThreadScreen(
         }
     )
 }
+
+data class PendingRoomInvite(
+    val roomId: String,
+    val roomName: String,
+    val roomPhotoUrl: String?,
+)
 
 @Composable
 private fun GiftMessageBubble(
@@ -356,6 +388,100 @@ private fun GiftMessageBubble(
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = bubbleSubTextColor
+            )
+        }
+    }
+}
+
+private data class RoomInvitePayload(
+    val roomId: String,
+    val roomName: String,
+    val roomPhotoUrl: String?,
+)
+
+private fun parseRoomInviteChatPayload(text: String): RoomInvitePayload? {
+    val raw = text.trim()
+    if (!raw.startsWith("ROOM_INVITE|")) return null
+    val parts = raw.split("|")
+    if (parts.size < 4) return null
+    val roomId = parts[1].trim()
+    if (roomId.isBlank()) return null
+    val roomName = parts[2].trim().ifBlank { "Voice Room" }
+    val roomPhoto = parts.subList(3, parts.size).joinToString("|").trim().ifBlank { "" }
+    return RoomInvitePayload(
+        roomId = roomId,
+        roomName = roomName,
+        roomPhotoUrl = roomPhoto.takeIf { it.isNotBlank() },
+    )
+}
+
+@Composable
+private fun RoomInviteMessageBubble(
+    info: RoomInvitePayload,
+    onJoinClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier = modifier
+            .background(color = Color(0xFFF8FAFC), shape = shape)
+            .border(width = 1.dp, color = Color(0xFFC7D2FE), shape = shape)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Voice Room Invite",
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF6B7280),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (!info.roomPhotoUrl.isNullOrBlank()) {
+                ChatProfileAvatar(
+                    photoUrl = info.roomPhotoUrl,
+                    contentDescription = info.roomName,
+                    size = 42.dp,
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color(0xFFE5E7EB), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("🎙", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = info.roomName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+                Text(
+                    text = "Room: ${info.roomId.takeLast(6)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF6B7280),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0xFFE0E7FF), RoundedCornerShape(999.dp))
+                .clickable { onJoinClick() }
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Text(
+                text = "Tap to Join",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color(0xFF1D4ED8),
             )
         }
     }

@@ -263,10 +263,10 @@ fun SocialVoiceRoomsScreen(
     joinConfirm?.let { prompt ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissJoinConfirm() },
-            title = { Text("Switch room?") },
+            title = { Text("Leave room?") },
             text = {
                 Text(
-                    "You are already in another voice room. If you join this group, your old room will be left. Continue?",
+                    "You need to leave this room first. Continue?",
                 )
             },
             confirmButton = {

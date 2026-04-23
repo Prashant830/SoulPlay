@@ -140,6 +140,22 @@ class SocialVoiceRoomsViewModel(
         viewModelScope.launch {
             val uid = requireUid()
             if (prompt.oldRoomId.isNotBlank() && prompt.oldRoomId != prompt.targetRoomId) {
+                val oldSeatsSnap = runCatching {
+                    database.reference.child("voiceRooms").child(prompt.oldRoomId).child("seats").get().await()
+                }.getOrNull()
+                val myOldSeatNo = oldSeatsSnap?.children
+                    ?.firstOrNull {
+                        val seatNo = it.key?.toIntOrNull() ?: return@firstOrNull false
+                        val occupantUid = it.child("uid").getValue(String::class.java).orEmpty()
+                        seatNo != 1 && occupantUid == uid
+                    }
+                    ?.key
+                    ?.toIntOrNull()
+                if (myOldSeatNo != null) {
+                    runCatching { socialVoiceRoomRepository.leaveSeat(prompt.oldRoomId, myOldSeatNo) }
+                }
+                runCatching { socialVoiceRoomRepository.dismissMyPendingSeatInvites(prompt.oldRoomId) }
+                runCatching { socialVoiceRoomRepository.markMyChatCleared(prompt.oldRoomId) }
                 runCatching { socialVoiceRoomRepository.setRoomPresence(prompt.oldRoomId, false) }
             }
             if (prompt.enterTargetViaRepository) {

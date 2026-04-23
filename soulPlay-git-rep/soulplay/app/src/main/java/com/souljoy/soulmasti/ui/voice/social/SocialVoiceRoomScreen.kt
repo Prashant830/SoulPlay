@@ -1,5 +1,7 @@
 package com.souljoy.soulmasti.ui.voice.social
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -74,6 +77,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -132,6 +136,8 @@ fun SocialVoiceRoomScreen(
     hasVoicePermission: () -> Boolean,
     requestVoicePermission: () -> Unit,
     onBack: () -> Unit,
+    onInviteFriends: (roomId: String, roomName: String, roomPhotoUrl: String?) -> Unit = { _, _, _ -> },
+    onRequestExitRoom: (roomId: String) -> Unit = {},
     onOpenUserProfile: (String) -> Unit = {},
     onOpenSoulLevel: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -166,6 +172,8 @@ fun SocialVoiceRoomScreen(
     var showRoomInfoSheet by remember { mutableStateOf(false) }
     var showRoomLevelSheet by remember { mutableStateOf(false) }
     var showRoomBackgroundSheet by remember { mutableStateOf(false) }
+    var showReportDialog by remember { mutableStateOf(false) }
+    var reportDraft by remember { mutableStateOf("") }
     var roomBackgroundPreviewTarget by remember { mutableStateOf<String?>(null) }
     var highQualityEnabled by remember { mutableStateOf(true) }
     var banTextChat by remember { mutableStateOf(false) }
@@ -206,16 +214,13 @@ fun SocialVoiceRoomScreen(
     val isOwnRoom = myUid != null && myUid == room?.ownerUid
     val roomActive = room?.ownerOnline == true && room?.collapsed != true
     val seatByNo = remember(seats) { seats.associateBy { it.seatNo } }
-    val onlineUsers = remember(room, seats) {
-        (
-            room?.onlineUids.orEmpty() +
-                seats.mapNotNull { it.occupantUid }
-            )
+    val onlineUsers = remember(room) {
+        room?.onlineUids.orEmpty()
             .filter { it.isNotBlank() }
             .toSet()
             .sorted()
     }
-    val onlineCountDisplay = maxOf(room?.onlineCount ?: 0, onlineUsers.size, participants.size)
+    val onlineCountDisplay = maxOf(room?.onlineCount ?: 0, onlineUsers.size)
     val totalRoomSoul = room?.contributionTotalSoul.orEmpty().values.sum()
     val liveRoomLevel = roomLevelForSoul(totalRoomSoul)
     val savedBackgroundOption =
@@ -444,6 +449,7 @@ fun SocialVoiceRoomScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .imePadding()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
@@ -506,7 +512,9 @@ fun SocialVoiceRoomScreen(
             Card(
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .imePadding(),
             ) {
                 Box(
                     modifier = Modifier
@@ -554,47 +562,50 @@ fun SocialVoiceRoomScreen(
                                 }
                             }
                         }
-                        Surface(
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0x441A2258),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                OutlinedTextField(
-                                    value = draft,
-                                    onValueChange = { draft = it },
-                                    modifier = Modifier.weight(1f),
-                                    placeholder = { Text("Type...", color = Color(0xFF94A3B8)) },
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                    keyboardActions = KeyboardActions(
-                                        onSend = {
-                                            val t = draft.trim()
-                                            if (t.isNotBlank()) {
-                                                viewModel.sendMessage(t)
-                                                draft = ""
-                                            }
-                                        },
-                                    ),
-                                    singleLine = true,
-                                )
-                                Button(
-                                    onClick = {
+                            OutlinedTextField(
+                                value = draft,
+                                onValueChange = { draft = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("Type...", color = Color(0xFF94A3B8)) },
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF60A5FA),
+                                    unfocusedBorderColor = Color(0xFF334155),
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    cursorColor = Color.White,
+                                ),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                keyboardActions = KeyboardActions(
+                                    onSend = {
                                         val t = draft.trim()
                                         if (t.isNotBlank()) {
                                             viewModel.sendMessage(t)
                                             draft = ""
                                         }
                                     },
-                                    shape = RoundedCornerShape(999.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF64748B)),
-                                ) {
-                                    Text("Send", color = Color.White)
-                                }
+                                ),
+                                singleLine = true,
+                            )
+                            Button(
+                                onClick = {
+                                    val t = draft.trim()
+                                    if (t.isNotBlank()) {
+                                        viewModel.sendMessage(t)
+                                        draft = ""
+                                    }
+                                },
+                                shape = RoundedCornerShape(999.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                            ) {
+                                Text("Send", color = Color.White)
                             }
                         }
                     }
@@ -928,17 +939,33 @@ fun SocialVoiceRoomScreen(
             val menuItems = buildList {
                 add(
                     RoomMenuAction("Invite Friends", Icons.Filled.SupervisorAccount) {
-                        viewModel.showInfo("Invite friends coming soon")
+                        val inviteRoomId = room?.roomId.orEmpty().ifBlank { viewModel.currentRoomId }
+                        if (inviteRoomId.isBlank()) {
+                            viewModel.showInfo("Room not ready")
+                        } else {
+                            val inviteRoomName = room?.roomName.orEmpty().ifBlank { "Voice Room" }
+                            val inviteRoomPhoto = room?.roomCoverUrl?.takeIf { it.isNotBlank() }
+                            onInviteFriends(inviteRoomId, inviteRoomName, inviteRoomPhoto)
+                        }
                     },
                 )
                 if (isOwnRoom) {
                     add(RoomMenuAction("Add Music", Icons.Filled.MusicNote) { viewModel.showInfo("Music coming soon") })
                 }
-                add(RoomMenuAction("Report Room", Icons.Filled.Info) { viewModel.showInfo("Report room coming soon") })
+                add(RoomMenuAction("Report Room", Icons.Filled.Info) { showReportDialog = true })
                 if (isOwnRoom) {
                     add(RoomMenuAction("Settings", Icons.Filled.Settings) { showRoomSettingsSheet = true })
                 }
-                add(RoomMenuAction("Exit", Icons.Filled.ExitToApp) { viewModel.leaveRoom(onDone = onBack) })
+                add(
+                    RoomMenuAction("Exit", Icons.Filled.ExitToApp) {
+                        val currentRoomId = room?.roomId.orEmpty().ifBlank { viewModel.currentRoomId }
+                        if (currentRoomId.isNotBlank()) {
+                            onRequestExitRoom(currentRoomId)
+                        } else {
+                            viewModel.leaveRoom(onDone = onBack)
+                        }
+                    },
+                )
             }
             RoomFunctionMenuOverlay(
                 actions = menuItems,
@@ -970,6 +997,68 @@ fun SocialVoiceRoomScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRenameRoomDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showReportDialog = false },
+            title = { Text("Report Room") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Describe your complaint. We will send it to support mail: ps962630@gmail.com",
+                        color = Color(0xFF4B5563),
+                    )
+                    OutlinedTextField(
+                        value = reportDraft,
+                        onValueChange = { reportDraft = it },
+                        placeholder = { Text("Write complaint...") },
+                        minLines = 3,
+                        maxLines = 5,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val message = reportDraft.trim()
+                        if (message.isEmpty()) {
+                            Toast.makeText(context, "Please enter your complaint", Toast.LENGTH_SHORT).show()
+                            return@TextButton
+                        }
+                        val roomName = room?.roomName.orEmpty().ifBlank { "Voice Room" }
+                        val roomId = room?.roomId.orEmpty().ifBlank { viewModel.currentRoomId }
+                        val subject = "Voice Room Complaint - $roomName"
+                        val body = buildString {
+                            appendLine("Room Name: $roomName")
+                            appendLine("Room Id: $roomId")
+                            appendLine("Reporter Uid: ${myUid.orEmpty()}")
+                            appendLine()
+                            appendLine("Complaint:")
+                            appendLine(message)
+                        }
+                        val emailIntent = Intent(
+                            Intent.ACTION_SENDTO,
+                            Uri.parse("mailto:ps962630@gmail.com"),
+                        ).apply {
+                            putExtra(Intent.EXTRA_SUBJECT, subject)
+                            putExtra(Intent.EXTRA_TEXT, body)
+                        }
+                        runCatching { context.startActivity(emailIntent) }
+                            .onSuccess {
+                                showReportDialog = false
+                                reportDraft = ""
+                            }
+                            .onFailure {
+                                Toast.makeText(context, "No email app found", Toast.LENGTH_SHORT).show()
+                            }
+                    },
+                ) { Text("Send") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReportDialog = false }) { Text("Cancel") }
             },
         )
     }
@@ -1306,7 +1395,7 @@ fun SocialVoiceRoomScreen(
                             verticalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("Welcome to SoulMast", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium)
+                                Text("Welcome to SoulMasti", color = Color.White.copy(alpha = 0.9f), style = MaterialTheme.typography.labelMedium)
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     repeat(4) {
                                         Box(
@@ -2388,7 +2477,7 @@ private fun RoomSeatRow(
             val occupiedBySelf = myUid != null && (seat.occupantUid == myUid || isMyOwnerSeat)
             val speakingUid = when {
                 occupiedBySelf -> myUid
-                no == 1 && !ownerUid.isNullOrBlank() -> ownerUid
+                no == 1 && ownerOnline && !ownerUid.isNullOrBlank() -> ownerUid
                 else -> seat.occupantUid
             }
             val canTake = canTakeSeat(seat)
