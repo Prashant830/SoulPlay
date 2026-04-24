@@ -23,6 +23,16 @@ val keystoreProperties = Properties().apply {
     }
 }
 val hasReleaseKeystore: Boolean = keystorePropertiesFile.exists()
+val appVersionCode: Int =
+    providers.gradleProperty("VERSION_CODE")
+        .orNull
+        ?.toIntOrNull()
+        ?: 1
+val appVersionName: String =
+    providers.gradleProperty("VERSION_CODE")
+        .orNull
+        ?.takeIf { it.isNotBlank() }
+        ?: "1.0"
 
 android {
     namespace = "com.souljoy.soulmasti"
@@ -32,8 +42,8 @@ android {
         applicationId = "com.souljoy.soulmasti"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "AGORA_APP_ID", "\"$agoraAppId\"")
@@ -179,5 +189,6 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("io.agora.rtc:voice-rtc-basic:4.6.3")
     implementation("com.android.billingclient:billing:7.0.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
     implementation("com.airbnb.android:lottie-compose:6.6.2")
 }
