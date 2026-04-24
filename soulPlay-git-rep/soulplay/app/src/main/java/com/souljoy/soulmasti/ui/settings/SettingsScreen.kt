@@ -1,5 +1,7 @@
 package com.souljoy.soulmasti.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -72,6 +74,7 @@ import androidx.compose.material.icons.outlined.Shop
 import androidx.compose.material.icons.outlined.Signpost
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -130,6 +133,16 @@ fun SettingsScreen(
     onOpenShop: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    val shortUid = myUid.take(6).uppercase(Locale.US).ifBlank { "------" }
+    val copyUidAndToast: () -> Unit = {
+        if (myUid.isNotBlank()) {
+            val short = myUid.take(6).uppercase(Locale.US)
+            val clipboard = context.getSystemService(ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(ClipData.newPlainText("User ID", short))
+            Toast.makeText(context, "Copied successfully", Toast.LENGTH_SHORT).show()
+        }
+    }
     val socialRepository: SocialRepository = koinInject()
     val friends by socialRepository.friends.collectAsStateWithLifecycle()
     val totalWinnings by viewModel.totalWinnings.collectAsStateWithLifecycle()
@@ -240,9 +253,11 @@ fun SettingsScreen(
             ProfileHeroSection(
                 displayName = currentUsername.orEmpty().ifBlank { stringResource(R.string.profile_default_name) },
                 imageUrl = profilePictureUrl,
+                shortUserId = shortUid,
                 onAvatarClick = {
                     FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }?.let(onOpenUserProfile)
                 },
+                onCopyUserId = copyUidAndToast,
                 onHeaderClick = { showEditProfileDialog = true }
             )
         }
@@ -606,7 +621,7 @@ fun SettingsScreen(
                                     HorizontalDivider(color = Color(0xFFEDEDED))
                                     EditProfileRow(label = "Nickname", value = usernameDraft.ifBlank { "Set nickname" }) { showNicknameEditor = true }
                                     HorizontalDivider(color = Color(0xFFEDEDED))
-                                    EditProfileRow(label = "User ID", value = "—") {}
+                                    EditProfileRow(label = "User ID", value = shortUid) { copyUidAndToast() }
                                 }
                             }
                         }
@@ -1012,6 +1027,8 @@ internal fun ProfilePreviewFullPage(
     profilePictureUrl: String?,
     currentUsername: String?,
     signature: String?,
+    displayedUserId: String? = null,
+    onCopyUserId: (() -> Unit)? = null,
     soul: Long?,
     receivedGiftHistory: List<ReceivedGiftSummary>,
     friendUids: Set<String>,
@@ -1170,10 +1187,22 @@ internal fun ProfilePreviewFullPage(
                                         color = Color(0xFF3F2E44)
                                     )
                                 }
-                                Text(
-                                    signature.orEmpty().ifBlank { stringResource(R.string.signature_default) },
-                                    color = Color(0xFF6B4E58)
-                                )
+                                displayedUserId?.takeIf { it.isNotBlank() }?.let { uid ->
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = "Id: ${uid.take(6).uppercase(Locale.US)}",
+                                            color = Color(0xFF6B4E58),
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Outlined.ContentCopy,
+                                            contentDescription = "Copy user id",
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .clickable { onCopyUserId?.invoke() },
+                                            tint = Color(0xFF6B4E58),
+                                        )
+                                    }
+                                }
                                 Row(
                                     modifier = Modifier.clickable(onClick = openSoulLevelDialog),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -1675,7 +1704,9 @@ private fun EditProfileRow(
 private fun ProfileHeroSection(
     displayName: String,
     imageUrl: String?,
+    shortUserId: String,
     onAvatarClick: () -> Unit,
+    onCopyUserId: () -> Unit,
     onHeaderClick: () -> Unit,
 ) {
     Card(
@@ -1699,7 +1730,21 @@ private fun ProfileHeroSection(
                 Spacer(modifier = Modifier.width(20.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(displayName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Profile", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "User ID: ${shortUserId.uppercase(Locale.US)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Icon(
+                            imageVector = Icons.Outlined.ContentCopy,
+                            contentDescription = "Copy user id",
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clickable { onCopyUserId() },
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             Icon(

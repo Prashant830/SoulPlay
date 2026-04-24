@@ -1,5 +1,7 @@
 package com.souljoy.soulmasti.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -72,6 +74,7 @@ import com.souljoy.soulmasti.ui.voice.game.defaultGiftWallItems
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.koin.compose.koinInject
+import java.util.Locale
 
 private data class RemoteProfileData(
     val username: String,
@@ -116,6 +119,14 @@ fun UserProfileScreen(
     val isSelfProfile = myUid != null && currentUid == myUid
     val isFriend = friends.contains(currentUid)
     val hasIncomingRequest = incomingRequests.any { it.fromUid == currentUid }
+    val copyUidAndToast: (String) -> Unit = { uid ->
+        if (uid.isNotBlank()) {
+            val short = uid.take(6).uppercase(Locale.US)
+            val clipboard = context.getSystemService(ClipboardManager::class.java)
+            clipboard?.setPrimaryClip(ClipData.newPlainText("ID", short))
+            Toast.makeText(context, "Copied successfully", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(currentUid, myUid, isSelfProfile) {
         val viewerUid = myUid ?: return@LaunchedEffect
@@ -364,6 +375,8 @@ fun UserProfileScreen(
                     profilePictureUrl = loaded.profilePictureUrl,
                     currentUsername = loaded.username,
                     signature = loaded.signature,
+                    displayedUserId = currentUid,
+                    onCopyUserId = { copyUidAndToast(currentUid) },
                     soul = loaded.soul,
                     receivedGiftHistory = loaded.receivedGiftHistory,
                     friendUids = loaded.friendUids,
