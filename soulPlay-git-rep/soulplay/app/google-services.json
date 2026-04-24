@@ -31,6 +31,14 @@
           }
         },
         {
+          "client_id": "728847710661-ab8f2sfik59ku266k1ftuk68amls9oku.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.souljoy.soulmasti",
+            "certificate_hash": "db5dc2e98844b6557bbe3c40f7b57b9160a312a8"
+          }
+        },
+        {
           "client_id": "728847710661-vknkvft3lmj6rg53jabtmmhjkse8q2k2.apps.googleusercontent.com",
           "client_type": 3
         }

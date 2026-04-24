@@ -29,7 +29,7 @@ val appVersionCode: Int =
         ?.toIntOrNull()
         ?: 1
 val appVersionName: String =
-    providers.gradleProperty("VERSION_CODE")
+    providers.gradleProperty("VERSION_NAME")
         .orNull
         ?.takeIf { it.isNotBlank() }
         ?: "1.0"
