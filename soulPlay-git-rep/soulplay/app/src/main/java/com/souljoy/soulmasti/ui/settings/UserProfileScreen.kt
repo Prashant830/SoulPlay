@@ -117,6 +117,34 @@ fun UserProfileScreen(
     val isFriend = friends.contains(currentUid)
     val hasIncomingRequest = incomingRequests.any { it.fromUid == currentUid }
 
+    LaunchedEffect(currentUid, myUid, isSelfProfile) {
+        val viewerUid = myUid ?: return@LaunchedEffect
+        if (isSelfProfile) return@LaunchedEffect
+        val db = FirebaseDatabase.getInstance().reference
+        val viewerSnap = runCatching { db.child("users").child(viewerUid).get().await() }.getOrNull()
+        val viewerName = viewerSnap?.child("username")?.getValue(String::class.java)?.trim()
+            ?.takeIf { it.isNotBlank() } ?: FirebaseUidMapping.shortLabel(viewerUid)
+        val viewerPhoto = viewerSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim().orEmpty()
+        val viewerGender = viewerSnap?.child("gender")?.getValue(String::class.java)?.trim().orEmpty()
+        runCatching {
+            db.child("users")
+                .child(currentUid)
+                .child("visitorDictionaryV1")
+                .child("views")
+                .child(viewerUid)
+                .setValue(
+                    mapOf(
+                        "uid" to viewerUid,
+                        "username" to viewerName,
+                        "profilePictureUrl" to viewerPhoto,
+                        "gender" to viewerGender,
+                        "viewedAt" to System.currentTimeMillis(),
+                    ),
+                )
+                .await()
+        }
+    }
+
     LaunchedEffect(currentUid, myUid) {
         if (myUid == null || currentUid == myUid) {
             outgoingPending = false

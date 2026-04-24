@@ -21,7 +21,7 @@ data class VoiceRoomShopItem(
     val oneDayPrice: Long = 700L,
 )
 
-enum class ShopCategory { ROOM_BACKGROUND }
+enum class ShopCategory { ROOM_BACKGROUND, VISITOR_DICTIONARY }
 
 data class VoiceRoomPurchase(
     val itemId: String,
@@ -101,6 +101,10 @@ class SoulMastiShoppingViewModel(
             if (purchaseVoiceColorUsing && itemId.isNotBlank() && purchases.any { it.itemId == itemId }) {
                 activeByCategory[ShopCategory.ROOM_BACKGROUND] = itemId
             }
+            val visitorItemId = activeNode?.child(ShopCategory.VISITOR_DICTIONARY.name)?.child("itemId")?.getValue(String::class.java).orEmpty()
+            if (visitorItemId.isNotBlank() && purchases.any { it.itemId == visitorItemId }) {
+                activeByCategory[ShopCategory.VISITOR_DICTIONARY] = visitorItemId
+            }
 
             _uiState.update {
                 it.copy(
@@ -155,11 +159,13 @@ class SoulMastiShoppingViewModel(
                 _uiState.update { it.copy(message = "Item expired") }
                 return@launch
             }
-            val updates = mapOf<String, Any>(
+            val updates = mutableMapOf<String, Any>(
                 "voiceRoomShopV1/active/${purchase.category.name}/itemId" to purchase.itemId,
                 "voiceRoomShopV1/active/${purchase.category.name}/appliedAt" to now,
-                "voiceRoomShopV1/purchaseVoiceColorUsing" to true,
             )
+            if (purchase.category == ShopCategory.ROOM_BACKGROUND) {
+                updates["voiceRoomShopV1/purchaseVoiceColorUsing"] = true
+            }
             runCatching {
                 database.reference.child("users").child(uid).updateChildren(updates).await()
             }.onSuccess {
@@ -292,6 +298,13 @@ class SoulMastiShoppingViewModel(
             id = "bg_neon_city",
             title = "Neon City",
             category = ShopCategory.ROOM_BACKGROUND,
+            previewRes = R.drawable.shop_bg_summer_breeze,
+            fullPreviewRes = R.drawable.shop_bg_summer_breeze,
+        ),
+        VoiceRoomShopItem(
+            id = "visitor_dictionary",
+            title = "Visitor Dictionary",
+            category = ShopCategory.VISITOR_DICTIONARY,
             previewRes = R.drawable.shop_bg_summer_breeze,
             fullPreviewRes = R.drawable.shop_bg_summer_breeze,
         ),

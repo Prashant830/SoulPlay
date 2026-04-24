@@ -90,6 +90,12 @@
     <string name="settings_signature">Signature</string>
     <string name="settings_soul_level">Soul Levels</string>
     <string name="settings_security_center">Security Center</string>
+    <string name="settings_visitor_dictionary">Visitor Dictionary</string>
+    <string name="settings_visitor_dictionary_locked">Visitor Dictionary is not active. Purchase and use it from Shop.</string>
+    <string name="settings_visitor_dictionary_title">Visitor Dictionary</string>
+    <string name="settings_visitor_dictionary_empty">No profile visitors yet.</string>
+    <string name="settings_visitor_dictionary_open_shop">Open Shop</string>
+    <string name="settings_visitor_viewed_at">Viewed: %1$s</string>
     <string name="settings_invite_friends">Invite Friends</string>
     <string name="settings_logout">Logout</string>
     <string name="settings_help_center_toast">Write a mail to: ps962630@gmail.com</string>

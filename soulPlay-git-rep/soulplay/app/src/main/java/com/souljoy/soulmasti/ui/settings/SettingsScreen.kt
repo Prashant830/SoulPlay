@@ -66,12 +66,12 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Security
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Shop
 import androidx.compose.material.icons.outlined.Signpost
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -94,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.database.FirebaseDatabase
 import coil.compose.AsyncImage
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
@@ -143,8 +144,8 @@ fun SettingsScreen(
     val historyUsernames by viewModel.historyUsernames.collectAsStateWithLifecycle()
     val userProfilePhotos by viewModel.userProfilePhotos.collectAsStateWithLifecycle()
     val helpCenterToastText = stringResource(R.string.settings_help_center_toast)
-    val securityCenterToastText = stringResource(R.string.settings_security_center_toast)
     val inviteComingSoonToastText = stringResource(R.string.settings_invite_coming_soon)
+    val visitorLockedText = stringResource(R.string.settings_visitor_dictionary_locked)
 
     var usernameDraft by remember { mutableStateOf(currentUsername.orEmpty()) }
     var signatureDraft by remember { mutableStateOf(signature.orEmpty()) }
@@ -161,6 +162,9 @@ fun SettingsScreen(
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+    var showVisitorDialog by remember { mutableStateOf(false) }
+    var visitorFeatureActive by remember { mutableStateOf(false) }
+    var visitorEntries by remember { mutableStateOf<List<ProfileVisitorEntry>>(emptyList()) }
     val topGiftBreakdown = remember(receivedGiftHistory) { buildTopGiftBreakdown(receivedGiftHistory) }
 
     val pickProfilePhoto = rememberLauncherForActivityResult(
@@ -185,6 +189,44 @@ fun SettingsScreen(
     }
     LaunchedEffect(signature) {
         signatureDraft = signature.orEmpty()
+    }
+    val refreshVisitorDictionary: suspend () -> Unit = {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }
+        if (uid == null) {
+            visitorFeatureActive = false
+            visitorEntries = emptyList()
+        } else {
+            val db = FirebaseDatabase.getInstance().reference
+            val userSnap = runCatching { db.child("users").child(uid).get().await() }.getOrNull()
+            val now = System.currentTimeMillis()
+            val visitorItem = userSnap
+                ?.child("voiceRoomShopV1")
+                ?.child("purchases")
+                ?.child("visitor_dictionary")
+            val expiresAt = visitorItem?.child("expiresAt")?.getValue(Long::class.java) ?: 0L
+            visitorFeatureActive = expiresAt > now
+            visitorEntries = userSnap
+                ?.child("visitorDictionaryV1")
+                ?.child("views")
+                ?.children
+                ?.mapNotNull { node ->
+                    val visitorUid = node.key?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                    val viewedAt = node.child("viewedAt").getValue(Long::class.java) ?: 0L
+                    ProfileVisitorEntry(
+                        uid = visitorUid,
+                        name = node.child("username").getValue(String::class.java)?.trim()
+                            ?.takeIf { it.isNotBlank() } ?: FirebaseUidMapping.shortLabel(visitorUid),
+                        photoUrl = node.child("profilePictureUrl").getValue(String::class.java)?.trim(),
+                        gender = node.child("gender").getValue(String::class.java)?.trim(),
+                        viewedAt = viewedAt,
+                    )
+                }
+                ?.sortedByDescending { it.viewedAt }
+                .orEmpty()
+        }
+    }
+    LaunchedEffect(Unit) {
+        refreshVisitorDictionary()
     }
 
     LazyColumn(
@@ -257,8 +299,11 @@ fun SettingsScreen(
                     "",
                     leftIcon = Icons.Outlined.Leaderboard
                 ) { showSoulLevelDialog = true }
-                SettingsNavRow(stringResource(R.string.settings_security_center), "", leftIcon = Icons.Outlined.Security) {
-                    Toast.makeText(context, securityCenterToastText, Toast.LENGTH_LONG).show()
+                SettingsNavRow(stringResource(R.string.settings_visitor_dictionary), "", leftIcon = Icons.Outlined.Visibility) {
+                    scope.launch {
+                        refreshVisitorDictionary()
+                        showVisitorDialog = true
+                    }
                 }
                 SettingsNavRow(stringResource(R.string.settings_invite_friends), "", leftIcon = Icons.Outlined.Person) {
                     Toast.makeText(context, inviteComingSoonToastText, Toast.LENGTH_SHORT).show()
@@ -313,6 +358,162 @@ fun SettingsScreen(
                 TextButton(onClick = { showLogoutConfirmDialog = false }) { Text(stringResource(R.string.no)) }
             }
         )
+    }
+    if (showVisitorDialog) {
+        val recentVisitorCount = visitorEntries.count { (System.currentTimeMillis() - it.viewedAt) <= 7L * 24L * 60L * 60L * 1000L }
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
+            color = Color.White,
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(horizontal = 12.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.clickable { showVisitorDialog = false },
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Visitors", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    if (visitorFeatureActive) {
+                        Text(
+                            text = "Clear All",
+                            color = Color(0xFF4B5563),
+                            modifier = Modifier.clickable {
+                                scope.launch {
+                                    val uid = FirebaseAuth.getInstance().currentUser?.uid?.takeIf { it.isNotBlank() }
+                                    if (uid != null) {
+                                        runCatching {
+                                            FirebaseDatabase.getInstance().reference
+                                                .child("users")
+                                                .child(uid)
+                                                .child("visitorDictionaryV1")
+                                                .child("views")
+                                                .removeValue()
+                                                .await()
+                                        }
+                                        refreshVisitorDictionary()
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
+                if (!visitorFeatureActive) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 18.dp),
+                    ) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .wrapContentWidth()
+                                .align(Alignment.TopCenter)
+                                .padding(top = 42.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 18.dp, horizontal = 14.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Text("Hi, ${currentUsername.orEmpty().ifBlank { "User" }}", style = MaterialTheme.typography.headlineSmall, color = Color(0xFF1F2937))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    visitorEntries.take(3).forEach { entry ->
+                                        if (!entry.photoUrl.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = entry.photoUrl,
+                                                contentDescription = entry.name,
+                                                modifier = Modifier.size(62.dp).clip(CircleShape),
+                                                contentScale = ContentScale.Crop,
+                                            )
+                                        } else {
+                                            Box(
+                                                modifier = Modifier.size(62.dp).clip(CircleShape).background(Color(0xFFD8DDE3)),
+                                                contentAlignment = Alignment.Center,
+                                            ) {
+                                                Text(entry.name.take(1).uppercase(), style = MaterialTheme.typography.titleLarge)
+                                            }
+                                        }
+                                    }
+                                }
+                                Text("You have ${visitorEntries.size} visitors", color = Color(0xFF374151), style = MaterialTheme.typography.bodyLarge)
+                                Text("$recentVisitorCount of them visited recently.", color = Color(0xFF374151))
+                                Spacer(Modifier.height(2.dp))
+                                Button(
+                                    onClick = {
+                                        showVisitorDialog = false
+                                        onOpenShop()
+                                    },
+                                    shape = RoundedCornerShape(999.dp),
+                                ) {
+                                    Text("Buy a Visitor Dictionary to get visitor info")
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF1F1F1))
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Start,
+                    ) {
+                        Text("Total Visitors ${visitorEntries.size}", color = Color(0xFF4B5563))
+                    }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(visitorEntries, key = { it.uid }) { entry ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.White)
+                                    .clickable {
+                                        showVisitorDialog = false
+                                        onOpenUserProfile(entry.uid)
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (!entry.photoUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = entry.photoUrl,
+                                        contentDescription = entry.name,
+                                        modifier = Modifier.size(52.dp).clip(CircleShape),
+                                        contentScale = ContentScale.Crop,
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier.size(52.dp).clip(CircleShape).background(Color(0xFFDDE3EA)),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(entry.name.take(1).uppercase(), style = MaterialTheme.typography.titleMedium)
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(entry.name, color = Color(0xFFB45309), fontWeight = FontWeight.SemiBold)
+                                    Text("Tap to open profile", color = Color(0xFF6B7280), style = MaterialTheme.typography.bodySmall)
+                                }
+                                Text(visitorTimeAgo(entry.viewedAt), color = Color(0xFF9CA3AF), style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showGiftHistoryDialog) {
@@ -2920,6 +3121,14 @@ private data class GiftBreakdownStat(
     val coins: Long,
 )
 
+private data class ProfileVisitorEntry(
+    val uid: String,
+    val name: String,
+    val photoUrl: String?,
+    val gender: String?,
+    val viewedAt: Long,
+)
+
 private fun buildTopGiftBreakdown(history: List<ReceivedGiftSummary>): List<GiftBreakdownStat> {
     return history
         .groupBy { it.giftId ?: "__unknown__" }
@@ -2932,4 +3141,16 @@ private fun buildTopGiftBreakdown(history: List<ReceivedGiftSummary>): List<Gift
         }
         .sortedWith(compareByDescending<GiftBreakdownStat> { it.coins }.thenByDescending { it.count })
         .take(3)
+}
+
+private fun visitorTimeAgo(viewedAt: Long): String {
+    val delta = (System.currentTimeMillis() - viewedAt).coerceAtLeast(0L)
+    val minute = 60_000L
+    val hour = 60L * minute
+    val day = 24L * hour
+    return when {
+        delta < hour -> "${(delta / minute).coerceAtLeast(1)} min ago"
+        delta < day -> "${(delta / hour).coerceAtLeast(1)} hour ago"
+        else -> "${(delta / day).coerceAtLeast(1)} day ago"
+    }
 }

@@ -25,10 +25,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -125,7 +128,8 @@ fun SoulMastiShoppingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 12.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             BalanceHeader(state.coins, state.soul)
@@ -396,6 +400,8 @@ private fun RowScope.TabChip(text: String, selected: Boolean, onClick: () -> Uni
 @Composable
 private fun CategoryRows(items: List<VoiceRoomShopItem>, onItemClick: (VoiceRoomShopItem) -> Unit) {
     CategoryBlock("Room Background", items.filter { it.category == ShopCategory.ROOM_BACKGROUND }, onItemClick)
+    Spacer(Modifier.height(10.dp))
+    CategoryBlock("Visitor Dictionary", items.filter { it.category == ShopCategory.VISITOR_DICTIONARY }, onItemClick)
 }
 
 @Composable
@@ -404,43 +410,55 @@ private fun CategoryBlock(
     items: List<VoiceRoomShopItem>,
     onItemClick: (VoiceRoomShopItem) -> Unit,
 ) {
-    val rows = ((items.size + 2) / 3).coerceAtLeast(1)
     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        userScrollEnabled = false,
-        modifier = Modifier.wrapContentHeight(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(top = 6.dp),
-    ) {
-        items(items, key = { it.id }) { item ->
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { onItemClick(item) },
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(10.dp),
-            ) {
-                Column(
+    Spacer(Modifier.height(6.dp))
+    items.chunked(3).forEach { rowItems ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            rowItems.forEach { item ->
+                Card(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight()
-                        .padding(6.dp),
-                    verticalArrangement = Arrangement.Center,
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                        .weight(1f)
+                        .clickable { onItemClick(item) },
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(10.dp),
                 ) {
-                    Spacer(Modifier.height(4.dp))
-                    MiniPreview(item = item)
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        item.title,
-                        style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text("🪙 700/day", style = MaterialTheme.typography.labelSmall, color = Color(0xFFE0A800))
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .wrapContentHeight()
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Spacer(Modifier.height(4.dp))
+                        if (item.category == ShopCategory.VISITOR_DICTIONARY) {
+                            VisitorDictionaryMiniCard()
+                        } else {
+                            MiniPreview(item = item)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            item.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            if (item.category == ShopCategory.VISITOR_DICTIONARY) "🪙 700/day" else "🪙 700/day",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFFE0A800),
+                        )
+                    }
                 }
             }
+            repeat(3 - rowItems.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -451,11 +469,23 @@ private fun MiniPreview(item: VoiceRoomShopItem) {
         modifier = Modifier
             .size(64.dp)
             .background(Brush.linearGradient(colors), RoundedCornerShape(8.dp)),
-    )
+        contentAlignment = Alignment.Center,
+    ) {
+        if (item.category == ShopCategory.VISITOR_DICTIONARY) {
+            Text(
+                text = "\uD83D\uDCD8",
+                style = MaterialTheme.typography.titleLarge,
+            )
+        }
+    }
 }
 
 @Composable
 private fun FullPreviewCard(item: VoiceRoomShopItem) {
+    if (item.category == ShopCategory.VISITOR_DICTIONARY) {
+        VisitorDictionaryFullCard(item = item)
+        return
+    }
     val colors = previewColors(item.id, full = true)
     Box(
         modifier = Modifier
@@ -525,6 +555,83 @@ private fun FullPreviewCard(item: VoiceRoomShopItem) {
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(14.dp),
+        )
+        if (item.category == ShopCategory.VISITOR_DICTIONARY) {
+            Text(
+                text = "\uD83D\uDCD8",
+                color = Color.White,
+                style = MaterialTheme.typography.displayMedium,
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VisitorDictionaryMiniCard() {
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .background(Color(0xFFF3E9CC), RoundedCornerShape(10.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(Color(0xFFE6D3A9), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Description,
+                contentDescription = "Visitor Logbook",
+                tint = Color(0xFF8B7355),
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun VisitorDictionaryFullCard(item: VoiceRoomShopItem) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(12.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(210.dp)
+                .background(Color(0xFFF3E9CC), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .background(Color(0xFFE6D3A9), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Description,
+                    contentDescription = item.title,
+                    tint = Color(0xFF8B7355),
+                    modifier = Modifier.size(62.dp),
+                )
+            }
+        }
+        Text(
+            text = item.title,
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color(0xFF1F2937),
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = "🪙 700",
+            style = MaterialTheme.typography.headlineSmall,
+            color = Color(0xFFE0A800),
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -736,6 +843,7 @@ private fun previewColors(itemId: String, full: Boolean): List<Color> = when (it
     "bg_sunset_gold" -> listOf(Color(0xFF7C2D12), Color(0xFFF59E0B), Color(0xFFFDE68A))
     "bg_royal_purple" -> listOf(Color(0xFF2E1065), Color(0xFF7E22CE), Color(0xFFC4B5FD))
     "bg_neon_city" -> listOf(Color(0xFF020617), Color(0xFF0EA5E9), Color(0xFFA78BFA))
+    "visitor_dictionary" -> listOf(Color(0xFF0F172A), Color(0xFF14B8A6), Color(0xFF86EFAC))
     else -> listOf(Color(0xFF64748B), Color(0xFF94A3B8))
 }
 
