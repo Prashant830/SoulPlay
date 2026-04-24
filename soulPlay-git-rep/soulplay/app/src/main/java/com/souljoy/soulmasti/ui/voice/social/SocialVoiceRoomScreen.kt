@@ -12,6 +12,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -129,6 +130,19 @@ import java.text.NumberFormat
 
 private enum class RoomInfoTab { Online, Contribution }
 private enum class ContributionTab { Daily, Weekly, Total }
+private data class SeatEmoteOption(val key: String, val label: String, val emoji: String, val tint: Color)
+private data class ActiveSeatEmote(val seatNo: Int, val option: SeatEmoteOption)
+private val SeatEmoteOptions = listOf(
+    SeatEmoteOption("happy", "Happy", "😄", Color(0xFFF59E0B)),
+    SeatEmoteOption("dj", "DJ Beat", "🎧", Color(0xFF6366F1)),
+    SeatEmoteOption("dance", "Dance", "🕺", Color(0xFF06B6D4)),
+    SeatEmoteOption("party", "Party", "🥳", Color(0xFFEC4899)),
+    SeatEmoteOption("kiss", "Kiss", "😘", Color(0xFFFB7185)),
+    SeatEmoteOption("hug", "Hug", "🤗", Color(0xFF14B8A6)),
+    SeatEmoteOption("miss", "Miss", "🥺", Color(0xFFA78BFA)),
+    SeatEmoteOption("love", "Love", "❤️", Color(0xFFEF4444)),
+    SeatEmoteOption("flirt_arrow", "Flirt Arrow", "💘", Color(0xFFF97316)),
+)
 private val SocialVoiceRoomGradientColors =
     listOf(Color(0xFF080B2D), Color(0xFF090D3B), Color(0xFF101943))
 
@@ -193,6 +207,7 @@ fun SocialVoiceRoomScreen(
     var giftSending by remember { mutableStateOf(false) }
     var giftError by remember { mutableStateOf<String?>(null) }
     var profilePreviewUid by remember { mutableStateOf<String?>(null) }
+    var emotePickerSeatNo by remember { mutableStateOf<Int?>(null) }
     val giftScope = rememberCoroutineScope()
     val giftCelebration = rememberGiftCelebrationQueue()
     val chatListState = rememberLazyListState()
@@ -258,6 +273,25 @@ fun SocialVoiceRoomScreen(
     LaunchedEffect(Unit) {
         viewModel.giftFxEvents.collect { ev ->
             giftCelebration.enqueueIfFx(context, ev.giftId)
+        }
+    }
+    var activeSeatEmote by remember { mutableStateOf<ActiveSeatEmote?>(null) }
+    val incomingRoomEmote = room?.activeSeatEmote
+    LaunchedEffect(
+        incomingRoomEmote?.seatNo,
+        incomingRoomEmote?.emoteKey,
+        incomingRoomEmote?.fromUid,
+        incomingRoomEmote?.createdAt,
+    ) {
+        val emote = incomingRoomEmote ?: return@LaunchedEffect
+        val createdAt = emote.createdAt ?: return@LaunchedEffect
+        val option = SeatEmoteOptions.firstOrNull { it.key == emote.emoteKey } ?: return@LaunchedEffect
+        if ((System.currentTimeMillis() - createdAt) > 2_200L) return@LaunchedEffect
+        val mapped = ActiveSeatEmote(seatNo = emote.seatNo, option = option)
+        activeSeatEmote = mapped
+        delay(2_200L)
+        if (activeSeatEmote == mapped) {
+            activeSeatEmote = null
         }
     }
     fun handleSeatTap(seatNo: Int, occupiedBySelf: Boolean) {
@@ -474,6 +508,7 @@ fun SocialVoiceRoomScreen(
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
                     seatAccentColor = seatAccentColor,
+                    activeEmote = activeSeatEmote,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 RoomSeatRow(
@@ -490,6 +525,7 @@ fun SocialVoiceRoomScreen(
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
                     seatAccentColor = seatAccentColor,
+                    activeEmote = activeSeatEmote,
                     isCompact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -507,6 +543,7 @@ fun SocialVoiceRoomScreen(
                     profileUrlForUid = { uid -> uid?.let { viewModel.profileImageUrl(it) } },
                     ownerOnline = room?.ownerOnline == true,
                     seatAccentColor = seatAccentColor,
+                    activeEmote = activeSeatEmote,
                     isCompact = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -525,6 +562,7 @@ fun SocialVoiceRoomScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(RoundedCornerShape(18.dp))
+                        .padding(0.dp,0.dp,0.dp,82.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         joinTickerText?.let { ticker ->
@@ -798,10 +836,51 @@ fun SocialVoiceRoomScreen(
                             Text("Gift")
                         }
                     }
+                    if (isSelf) {
+                        Button(
+                            onClick = {
+                                emotePickerSeatNo = profileSeat.seatNo
+                                profileDialogSeatNo = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED)),
+                        ) {
+                            Text("Emote")
+                        }
+                    }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { profileDialogSeatNo = null }) { Text("Close") }
+            },
+        )
+    }
+    if (emotePickerSeatNo != null) {
+        AlertDialog(
+            onDismissRequest = { emotePickerSeatNo = null },
+            title = { Text("Choose Emote") },
+            text = {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SeatEmoteOptions.forEach { option ->
+                        Button(
+                            onClick = {
+                                viewModel.sendSeatEmote(
+                                    seatNo = emotePickerSeatNo ?: return@Button,
+                                    emoteKey = option.key,
+                                )
+                                emotePickerSeatNo = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = option.tint),
+                        ) {
+                            Text("${option.emoji} ${option.label}")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { emotePickerSeatNo = null }) { Text("Close") }
             },
         )
     }
@@ -2219,10 +2298,10 @@ private fun GiftChatCard(
             )
             HorizontalDivider(color = Color.White.copy(alpha = 0.18f))
             val rewards = buildString {
-                if (event.receiverCoins > 0L) append("Gold +${event.receiverCoins}")
+                if (event.receiverCoins > 0L) append("Coins +${event.receiverCoins}")
                 if (event.receiverSoul > 0L) {
                     if (isNotEmpty()) append(", ")
-                    append("Charm +${event.receiverSoul}")
+                    append("Souls +${event.receiverSoul}")
                 }
                 if (isEmpty()) append("Gift sent")
             }
@@ -2470,6 +2549,7 @@ private fun RoomSeatRow(
     profileUrlForUid: (String?) -> String?,
     ownerOnline: Boolean,
     seatAccentColor: Color,
+    activeEmote: ActiveSeatEmote?,
     modifier: Modifier = Modifier,
     isCompact: Boolean = false,
 ) {
@@ -2569,6 +2649,53 @@ private fun RoomSeatRow(
                                 )
                             }
                         }
+                    }
+                    if (activeEmote != null && no == activeEmote.seatNo) {
+                        val transition = rememberInfiniteTransition(label = "seat-emote")
+                        val scale by transition.animateFloat(
+                            initialValue = 0.9f,
+                            targetValue = 1.12f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 620, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                            label = "seat-emote-scale",
+                        )
+                        val alpha by transition.animateFloat(
+                            initialValue = 0.74f,
+                            targetValue = 1f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 620, easing = LinearEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                            label = "seat-emote-alpha",
+                        )
+                        val rotate by transition.animateFloat(
+                            initialValue = -5f,
+                            targetValue = 5f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(durationMillis = 620, easing = FastOutSlowInEasing),
+                                repeatMode = RepeatMode.Reverse,
+                            ),
+                            label = "seat-emote-rotation",
+                        )
+                        Text(
+                            text = activeEmote.option.emoji,
+                            style = MaterialTheme.typography.headlineMedium,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .background(
+                                    color = activeEmote.option.tint.copy(alpha = 0.20f),
+                                    shape = RoundedCornerShape(999.dp),
+                                )
+                                .padding(horizontal = 5.dp, vertical = 2.dp)
+                                .graphicsLayer {
+                                    this.alpha = alpha
+                                    scaleX = scale
+                                    scaleY = scale
+                                    rotationZ = rotate
+                                },
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(4.dp))

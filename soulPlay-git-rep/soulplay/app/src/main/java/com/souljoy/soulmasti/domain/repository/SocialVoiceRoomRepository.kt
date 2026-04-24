@@ -56,5 +56,7 @@ interface SocialVoiceRoomRepository {
     fun observeRoomChat(roomId: String): Flow<List<SocialVoiceChatMessage>>
 
     suspend fun sendRoomChatMessage(roomId: String, text: String): Result<Unit>
+
+    suspend fun sendSeatEmote(roomId: String, seatNo: Int, emoteKey: String): Result<Unit>
 }
 

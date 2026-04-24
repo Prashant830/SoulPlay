@@ -242,6 +242,14 @@ class SocialVoiceRoomViewModel(
         }
     }
 
+    fun sendSeatEmote(seatNo: Int, emoteKey: String) {
+        viewModelScope.launch {
+            repository.sendSeatEmote(roomId, seatNo, emoteKey).onFailure {
+                _error.value = it.message ?: "Could not send emote"
+            }
+        }
+    }
+
     suspend fun sendGift(toUid: String, giftId: String, selectedCount: Int): Result<GiftSendResult> {
         if (toUid.isBlank()) return Result.failure(IllegalArgumentException("Invalid recipient"))
         val result = giftRepository.sendGift(

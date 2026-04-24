@@ -13,6 +13,7 @@ import com.souljoy.soulmasti.domain.model.SeatRole
 import com.souljoy.soulmasti.domain.model.SocialSeatInvite
 import com.souljoy.soulmasti.domain.model.SocialVoiceChatMessage
 import com.souljoy.soulmasti.domain.model.SocialVoiceRoomSnapshot
+import com.souljoy.soulmasti.domain.model.SocialVoiceSeatEmote
 import com.souljoy.soulmasti.domain.model.SocialVoiceSeat
 import com.souljoy.soulmasti.domain.model.VoiceEntitlementState
 import com.souljoy.soulmasti.domain.repository.SocialVoiceRoomRepository
@@ -557,6 +558,26 @@ class FirebaseSocialVoiceRoomRepository(
         ).await()
     }
 
+    override suspend fun sendSeatEmote(roomId: String, seatNo: Int, emoteKey: String): Result<Unit> = runCatching {
+        val uid = requireUid()
+        requireValidSeat(seatNo)
+        val key = emoteKey.trim()
+        if (key.isBlank()) error("Invalid emote")
+        val roomRef = database.reference.child("voiceRooms").child(roomId)
+        val roomSnap = roomRef.get().await()
+        val seatSnap = roomSnap.child("seats").child(seatNo.toString())
+        val occupantUid = seatSnap.child("uid").getValue(String::class.java).orEmpty()
+        if (occupantUid != uid) error("You can emote only from your own occupied seat")
+        roomRef.child("seatEmote").setValue(
+            mapOf(
+                "seatNo" to seatNo,
+                "emoteKey" to key,
+                "fromUid" to uid,
+                "createdAt" to ServerValue.TIMESTAMP,
+            ),
+        ).await()
+    }
+
     private fun parseRoom(roomId: String, snap: DataSnapshot): SocialVoiceRoomSnapshot? {
         if (!snap.exists()) return null
         val ownerUid = snap.child("ownerUid").getValue(String::class.java)?.takeIf { it.isNotBlank() } ?: roomId
@@ -609,6 +630,8 @@ class FirebaseSocialVoiceRoomRepository(
         } else {
             emptyMap()
         }
+        val seatEmoteSnap = snap.child("seatEmote")
+        val activeSeatEmote = parseSeatEmote(seatEmoteSnap)
         val seats = (1..10).map { no ->
             val seat = snap.child("seats").child(no.toString())
             val uid = seat.child("uid").getValue(String::class.java)?.takeIf { it.isNotBlank() }
@@ -645,6 +668,22 @@ class FirebaseSocialVoiceRoomRepository(
             contributionDailySoul = dailySoulContribution,
             contributionWeeklySoul = weeklySoulContribution,
             contributionTotalSoul = totalSoulContribution,
+            activeSeatEmote = activeSeatEmote,
+        )
+    }
+
+    private fun parseSeatEmote(snapshot: DataSnapshot): SocialVoiceSeatEmote? {
+        if (!snapshot.exists()) return null
+        val seatNo = parseLong(snapshot.child("seatNo").value)?.toInt() ?: return null
+        if (seatNo !in 1..10) return null
+        val emoteKey = snapshot.child("emoteKey").getValue(String::class.java)?.trim().orEmpty()
+        val fromUid = snapshot.child("fromUid").getValue(String::class.java)?.trim().orEmpty()
+        if (emoteKey.isBlank() || fromUid.isBlank()) return null
+        return SocialVoiceSeatEmote(
+            seatNo = seatNo,
+            emoteKey = emoteKey,
+            fromUid = fromUid,
+            createdAt = parseLong(snapshot.child("createdAt").value),
         )
     }
 

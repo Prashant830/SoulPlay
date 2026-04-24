@@ -33,6 +33,14 @@ data class SocialVoiceRoomSnapshot(
     val contributionDailySoul: Map<String, Long> = emptyMap(),
     val contributionWeeklySoul: Map<String, Long> = emptyMap(),
     val contributionTotalSoul: Map<String, Long> = emptyMap(),
+    val activeSeatEmote: SocialVoiceSeatEmote? = null,
+)
+
+data class SocialVoiceSeatEmote(
+    val seatNo: Int,
+    val emoteKey: String,
+    val fromUid: String,
+    val createdAt: Long?,
 )
 
 data class SocialVoiceChatMessage(
