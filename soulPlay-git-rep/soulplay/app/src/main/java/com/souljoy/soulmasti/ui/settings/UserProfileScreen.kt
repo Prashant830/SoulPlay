@@ -226,12 +226,12 @@ fun UserProfileScreen(
         isFetching = true
         val db = FirebaseDatabase.getInstance().reference
         val userSnap = runCatching { db.child("users").child(currentUid).get().await() }.getOrNull()
-        val username = userSnap?.child("username")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
+        val username = userSnap?.child("username")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
             ?: FirebaseUidMapping.shortLabel(currentUid)
-        val profilePictureUrl = userSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
-        val signature = userSnap?.child("signature")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
-            ?: userSnap?.child("bio")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
-            ?: userSnap?.child("status")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }
+        val profilePictureUrl = userSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
+        val signature = userSnap?.child("signature")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
+            ?: userSnap?.child("bio")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
+            ?: userSnap?.child("status")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
         val soul = userSnap.readLongFromSchema("soul", "soulValue", "charms")
         val friendUids = runCatching {
             FirebaseFirestore.getInstance()
@@ -247,6 +247,7 @@ fun UserProfileScreen(
         }.getOrDefault(emptySet())
 
         val senderNames = mutableMapOf<String, String>()
+        val senderPhotos = mutableMapOf<String, String>()
         val giftSnap = runCatching { db.child("users").child(currentUid).child("giftsReceived").get().await() }.getOrNull()
         val gifts = giftSnap?.children?.mapNotNull { child ->
             val coins = child.child("coins").getValue(Long::class.java) ?: return@mapNotNull null
@@ -261,10 +262,12 @@ fun UserProfileScreen(
                 senderNames[senderUid] ?: run {
                     val senderSnap = runCatching { db.child("users").child(senderUid).get().await() }.getOrNull()
                     val name = senderSnap?.child("username")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
+                    val photo = senderSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }
                     if (name != null) senderNames[senderUid] = name
+                    if (photo != null) senderPhotos[senderUid] = photo
                     name
                 }
-            }
+            } ?: FirebaseUidMapping.shortLabel(fromUserId.orEmpty())
             ReceivedGiftSummary(
                 fromUserId = fromUserId,
                 fromDisplayName = fromDisplayName,
@@ -282,6 +285,18 @@ fun UserProfileScreen(
         val profilePhotos = mutableMapOf<String, String>()
         profilePictureUrl?.let { profilePhotos[currentUid] = it }
         profileNames[currentUid] = username
+        profileNames.putAll(senderNames)
+        profilePhotos.putAll(senderPhotos)
+        friendUids.forEach { friendUid ->
+            if (profileNames.containsKey(friendUid) && profilePhotos.containsKey(friendUid)) return@forEach
+            val friendSnap = runCatching { db.child("users").child(friendUid).get().await() }.getOrNull()
+            friendSnap?.child("username")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }?.let {
+                profileNames[friendUid] = it
+            }
+            friendSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }?.let {
+                profilePhotos[friendUid] = it
+            }
+        }
         roomsSnap?.children?.forEach { room ->
             if (!room.child("players").hasChild(currentUid)) return@forEach
             val status = room.child("status").getValue(String::class.java)
@@ -317,12 +332,12 @@ fun UserProfileScreen(
                 scoresByUser = scores,
             )
             scores.keys.forEach { scoreUid ->
-                if (profileNames.containsKey(scoreUid)) return@forEach
+                if (profileNames.containsKey(scoreUid) && profilePhotos.containsKey(scoreUid)) return@forEach
                 val peerSnap = runCatching { db.child("users").child(scoreUid).get().await() }.getOrNull()
-                peerSnap?.child("username")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }?.let {
+                peerSnap?.child("username")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }?.let {
                     profileNames[scoreUid] = it
                 }
-                peerSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.takeIf { it.isNotBlank() }?.let {
+                peerSnap?.child("profilePictureUrl")?.getValue(String::class.java)?.trim()?.takeIf { it.isNotBlank() }?.let {
                     profilePhotos[scoreUid] = it
                 }
             }
